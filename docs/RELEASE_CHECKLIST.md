@@ -4,11 +4,11 @@ Do not publish from the working directory. Build the public artifact from the po
 
 ## Maintainer decisions
 
-- [ ] Confirm project name, copyright holder, and year.
-- [ ] Formally adopt Apache-2.0 for source code.
-- [ ] Formally adopt CC BY 4.0 for the self-authored synthetic Demo data.
+- [x] Confirm project name, copyright holder (`Ryan915124`), and year (`2026`).
+- [x] Formally adopt Apache-2.0 for source code.
+- [x] Formally adopt CC BY 4.0 for the self-authored synthetic Demo data.
 - [ ] Rotate the previously configured GLM API key in the provider console.
-- [ ] Verify CODEOWNERS and replace `CODEOWNERS.example` only with a real GitHub login.
+- [x] Verify CODEOWNERS with the GitHub login `@Ryan-915124`.
 
 ## Source boundary
 

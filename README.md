@@ -206,6 +206,6 @@ See [Data Boundary](docs/DATA_BOUNDARY.md), [data licensing](DATA_LICENSE.md), a
 
 ## License and Alpha status
 
-The proposed software license is Apache-2.0. The proposed license for the project-owned synthetic Demo data is CC BY 4.0. A maintainer must formally confirm both choices, the copyright identity, and the attribution before the first public release. Third-party dependencies and model/provider assets retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md).
+MagicForge software and project-owned documentation are licensed under Apache-2.0. The project-owned synthetic Demo data in `data/demo/` is licensed under CC BY 4.0. Copyright 2026 Ryan915124. Third-party dependencies and model/provider assets retain their own terms; see [data licensing](DATA_LICENSE.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Known deferred work is recorded in the ADRs for the [Production read-model snapshot](docs/adr/production-read-model-snapshot.md) and [background GLM worker](docs/adr/background-worker-boundary.md). Multi-tenancy and a microservice split are not part of this Alpha.

@@ -9,13 +9,18 @@ The public source artifact contains only the self-authored synthetic fixture in
 `self_authored=true`, and `redistribution_allowed=true`; the release audit fails
 closed if any declaration is absent or false.
 
-The proposed data license for `data/demo/` is Creative Commons Attribution 4.0
-International (`CC BY 4.0`). A maintainer must formally confirm that choice in
-the release checklist before publishing the fixture. The official license text
-is <https://creativecommons.org/licenses/by/4.0/legalcode>. Distribution under
+The self-authored synthetic fixture in `data/demo/` is licensed under Creative
+Commons Attribution 4.0 International (`CC BY 4.0`). Copyright 2026
+Ryan915124. The official license text is
+<https://creativecommons.org/licenses/by/4.0/legalcode>. Distribution under
 that license requires appropriate credit, a link to the license, and an
-indication of changes. This data-license proposal does not alter the
-Apache-2.0 license for MagicForge code and project documentation.
+indication of changes. Recommended attribution:
+
+> MagicForge Synthetic Demo Corpus, Copyright 2026 Ryan915124, licensed under
+> CC BY 4.0.
+
+This data license does not alter the Apache-2.0 license for MagicForge code and
+project-owned documentation.
 
 The artifact contains no acquired papers, books, website captures, transcripts,
 provider payloads, private review runs, Qdrant snapshots, or production database
