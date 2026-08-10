@@ -31,6 +31,20 @@ def test_audit_accepts_small_public_source_tree(tmp_path: Path) -> None:
     assert audit_tree(root) == []
 
 
+def test_audit_rejects_unresolved_public_release_placeholder(tmp_path: Path) -> None:
+    root = tmp_path / "public"
+    marker = "OFFICIAL_" + "REPOSITORY_URL"
+    _write(root / "README.md", f"git clone <{marker}>\n")
+
+    findings = audit_tree(root)
+
+    assert [
+        (finding.code, finding.path)
+        for finding in findings
+        if finding.code == "release_placeholder"
+    ] == [("release_placeholder", "README.md")]
+
+
 def test_audit_rejects_every_private_boundary(tmp_path: Path) -> None:
     root = tmp_path / "candidate"
     _write(root / "research" / "runs" / "run-001" / "source.json", "{}\n")

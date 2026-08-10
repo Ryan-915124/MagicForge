@@ -104,6 +104,71 @@ exit 2
     return docker
 
 
+def _write_fake_runtime_doctor(tmp_path: Path) -> tuple[Path, Path]:
+    docker = tmp_path / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -eu
+
+state_dir="${FAKE_DOCKER_STATE_DIR:?}"
+printf '%s\n' "$*" >> "${state_dir}/doctor-calls.log"
+
+case "${1:-}" in
+  info)
+    exit 0
+    ;;
+  inspect)
+    format="${3:-}"
+    if [[ "${format}" == *'.State.Status'* ]]; then
+      printf 'exited 0\n'
+    elif [[ "${format}" == *'.State.Health'* ]]; then
+      printf 'healthy\n'
+    fi
+    exit 0
+    ;;
+  compose)
+    if [[ " $* " == *" version "* || " $* " == *" config --quiet "* ]]; then
+      exit 0
+    fi
+    if [[ " $* " == *" ps --services --filter status=running "* ]]; then
+      printf '%s\n' postgres qdrant api-dev web-dev
+      exit 0
+    fi
+    if [[ " $* " == *" ps --all --quiet migrate "* ]]; then
+      printf 'migrate-container\n'
+      exit 0
+    fi
+    if [[ " $* " == *" ps --quiet "* ]]; then
+      service="${@: -1}"
+      printf '%s-container\n' "${service}"
+      exit 0
+    fi
+    if [[ " $* " == *" exec --no-TTY --env PYTHONDONTWRITEBYTECODE=1 api-dev python -m scripts.ops.doctor "* ]]; then
+      printf '{"status":"ready","profile":"development"}\n'
+      exit 0
+    fi
+    exit 0
+    ;;
+esac
+
+exit 2
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    curl = tmp_path / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+set -eu
+printf '%s\n' "$*" >> "${FAKE_DOCKER_STATE_DIR:?}/curl-calls.log"
+exit 0
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    return docker, curl
+
+
 @pytest.mark.parametrize("profile", ["demo", "development", "production"])
 def test_static_delivery_check_passes(profile: str) -> None:
     compose_static_check.validate(profile)
@@ -210,6 +275,9 @@ def test_compose_has_gated_services_and_no_private_mounts() -> None:
     )
     assert services["postgres-production"].get("ports") is None
     assert services["qdrant-production"].get("ports") is None
+    assert services["qdrant"]["ports"] == [
+        "127.0.0.1:${MAGICFORGE_QDRANT_PORT:-6333}:6333"
+    ]
 
 
 def test_container_builds_are_locked_explicit_and_non_root() -> None:
@@ -351,6 +419,34 @@ def test_cli_up_fails_when_seed_job_fails(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "seed failed during startup (exit=17)" in result.stderr
     assert "MagicForge demo started" not in result.stdout
+
+
+def test_cli_doctor_reads_qdrant_inside_the_compose_network(tmp_path: Path) -> None:
+    docker, _curl = _write_fake_runtime_doctor(tmp_path)
+    result = _run_cli(
+        "doctor",
+        "development",
+        docker_bin=str(docker),
+        extra_environment={
+            "FAKE_DOCKER_STATE_DIR": str(tmp_path),
+            "PATH": f"{tmp_path}:{os.environ['PATH']}",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "doctor: development is ready" in result.stdout
+    calls = (tmp_path / "doctor-calls.log").read_text(encoding="utf-8")
+    assert (
+        "exec --no-TTY --env PYTHONDONTWRITEBYTECODE=1 "
+        "api-dev python -m scripts.ops.doctor"
+    ) in calls
+    assert "--api-url http://127.0.0.1:8000" in calls
+    assert "--qdrant-url http://qdrant:6333" in calls
+    assert "--corpus /opt/magicforge/data/demo/corpus.json" in calls
+    assert "127.0.0.1:6333" not in calls
+    curl_calls = (tmp_path / "curl-calls.log").read_text(encoding="utf-8")
+    assert "http://127.0.0.1:8000/health/ready" in curl_calls
+    assert "http://127.0.0.1:3000/login" in curl_calls
 
 
 @pytest.mark.parametrize(

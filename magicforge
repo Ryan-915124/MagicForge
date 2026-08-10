@@ -82,6 +82,13 @@ runtime_services() {
   esac
 }
 
+profile_api_service() {
+  case "$1" in
+    demo) printf '%s\n' api ;;
+    development) printf '%s\n' api-dev ;;
+  esac
+}
+
 assert_completed_job() {
   local profile="$1" service="$2" container state
   container="$(compose --profile "${profile}" ps --all --quiet "${service}")"
@@ -268,12 +275,18 @@ command_doctor() {
     assert_completed_job "${profile}" seed
   fi
   assert_safe_mounts "${profile}"
-  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" -m scripts.ops.doctor \
+  http_check "http://127.0.0.1:${MAGICFORGE_API_PORT:-8000}/health/ready" \
+    || die "FastAPI host readiness check failed"
+  local api_service
+  api_service="$(profile_api_service "${profile}")"
+  compose --profile "${profile}" exec --no-TTY \
+    --env PYTHONDONTWRITEBYTECODE=1 \
+    "${api_service}" python -m scripts.ops.doctor \
     --profile "${profile}" \
-    --api-url "http://127.0.0.1:${MAGICFORGE_API_PORT:-8000}" \
-    --qdrant-url "http://127.0.0.1:${MAGICFORGE_QDRANT_PORT:-6333}" \
-    --corpus "${ROOT_DIR}/data/demo/corpus.json" \
-    || die "Demo corpus identity or point-count verification failed"
+    --api-url "http://127.0.0.1:8000" \
+    --qdrant-url "http://qdrant:6333" \
+    --corpus "/opt/magicforge/data/demo/corpus.json" \
+    || die "runtime corpus identity or point-count verification failed"
   http_check "http://127.0.0.1:${MAGICFORGE_WEB_PORT:-3000}/login" \
     || die "Next.js readiness check failed"
   if [[ "${profile}" == "demo" ]]; then

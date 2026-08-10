@@ -104,6 +104,9 @@ _REDISTRIBUTION_EXTENSIONS = frozenset(
     {".json", ".jsonl", ".toml", ".yaml", ".yml"}
 )
 _PRIVATE_REFERENCE = re.compile(r"(?<![A-Za-z0-9_.-])research/runs(?:/|\b)")
+_RELEASE_PLACEHOLDER_MARKERS = (
+    "OFFICIAL_" + "REPOSITORY_URL",
+)
 _PLACEHOLDER_MARKERS = (
     "changeme",
     "dummy",
@@ -216,6 +219,16 @@ def _credential_has_signal(value: str) -> bool:
 
 def _scan_text(path: str, suffix: str, text: str) -> list[AuditFinding]:
     findings: list[AuditFinding] = []
+    for marker in _RELEASE_PLACEHOLDER_MARKERS:
+        if marker in text:
+            findings.append(
+                AuditFinding(
+                    "release_placeholder",
+                    path,
+                    "Unresolved public-release placeholder found.",
+                )
+            )
+            break
     for pattern in _HOST_ABSOLUTE_PATHS:
         if match := pattern.search(text):
             runtime_home = match.group(0).rstrip(".,:;)")

@@ -14,7 +14,7 @@ Prerequisites:
 On Windows with WSL, enable Docker Desktop integration for the distribution before continuing.
 
 ```bash
-git clone <OFFICIAL_REPOSITORY_URL>
+git clone https://github.com/Ryan-915124/MagicForge.git
 cd MagicForge
 ./magicforge up demo
 ./magicforge doctor demo
