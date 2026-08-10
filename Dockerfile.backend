@@ -1,0 +1,83 @@
+# syntax=docker/dockerfile:1.7
+
+ARG PYTHON_IMAGE=python:3.12.3-slim-bookworm
+
+FROM ${PYTHON_IMAGE} AS builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /build
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:${PATH}
+
+COPY requirements.lock ./requirements.lock
+RUN pip install --no-cache-dir --requirement requirements.lock
+
+
+FROM ${PYTHON_IMAGE} AS runtime
+
+ENV HOME=/home/magicforge \
+    PATH=/opt/venv/bin:${PATH} \
+    PYTHONPATH=/opt/magicforge \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN groupadd --gid 10001 magicforge \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/magicforge magicforge \
+    && mkdir -p /opt/magicforge /home/magicforge/.cache \
+    && chown -R magicforge:magicforge /opt/magicforge /home/magicforge
+
+WORKDIR /opt/magicforge
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code explicitly. Never copy the repository root, .env, local
+# virtual environments, or arbitrary acquisition runs into an image.
+COPY --chown=magicforge:magicforge alembic.ini ./alembic.ini
+COPY --chown=magicforge:magicforge migrations ./migrations
+COPY --chown=magicforge:magicforge analysis ./analysis
+COPY --chown=magicforge:magicforge app ./app
+COPY --chown=magicforge:magicforge knowledge ./knowledge
+COPY --chown=magicforge:magicforge llm ./llm
+COPY --chown=magicforge:magicforge persistence ./persistence
+COPY --chown=magicforge:magicforge prompts ./prompts
+COPY --chown=magicforge:magicforge retrieval ./retrieval
+COPY --chown=magicforge:magicforge security ./security
+COPY --chown=magicforge:magicforge scripts ./scripts
+COPY --chown=magicforge:magicforge data/demo ./data/demo
+COPY --chown=magicforge:magicforge research/__init__.py ./research/__init__.py
+COPY --chown=magicforge:magicforge research/governance.py ./research/governance.py
+COPY --chown=magicforge:magicforge research/models.py ./research/models.py
+COPY --chown=magicforge:magicforge research/pipeline.py ./research/pipeline.py
+COPY --chown=magicforge:magicforge research/acquisition ./research/acquisition
+COPY --chown=magicforge:magicforge research/bootstrap ./research/bootstrap
+COPY --chown=magicforge:magicforge research/citation ./research/citation
+COPY --chown=magicforge:magicforge research/evidence ./research/evidence
+COPY --chown=magicforge:magicforge research/extraction ./research/extraction
+COPY --chown=magicforge:magicforge research/review ./research/review
+COPY --chown=magicforge:magicforge research/search ./research/search
+
+USER 10001:10001
+EXPOSE 8000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).read()"
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]
+
+
+FROM runtime AS development
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/opt/magicforge"]
+
+
+FROM runtime AS ops
+
+USER root
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+
+ENTRYPOINT ["python", "-m", "scripts.ops.backup_restore"]

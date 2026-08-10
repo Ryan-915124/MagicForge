@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="${ROOT_DIR}/compose.yaml"
+DOCKER_BIN="${MAGICFORGE_DOCKER_BIN:-docker}"
+PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  PYTHON_BIN="${MAGICFORGE_PYTHON_BIN:-python3}"
+fi
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./magicforge up demo|development
+  ./magicforge doctor demo|development [--static]
+  ./magicforge down demo|development [--volumes --confirm TOKEN]
+  ./magicforge logs demo|development [service]
+  ./magicforge backup demo --output DIRECTORY
+  ./magicforge restore demo --input BUNDLE_DIRECTORY --confirm TOKEN
+  ./magicforge audit-public [DIRECTORY | --source DIRECTORY | --artifact PATH] [--json]
+  ./magicforge build-public-release [--output ARCHIVE.zip]
+
+The restore confirmation token is restore-demo.
+Volume deletion tokens are delete-demo-volumes and delete-development-volumes.
+The CLI has no Production runtime profile. Plain down always preserves volumes.
+EOF
+}
+
+die() {
+  printf 'magicforge: %s\n' "$*" >&2
+  exit 1
+}
+
+validate_profile() {
+  case "${1:-}" in
+    demo|development) ;;
+    *) die "profile must be demo or development" ;;
+  esac
+}
+
+validate_ops_profile() {
+  [[ "${1:-}" == "demo" ]] \
+    || die "backup and restore are limited to the public Demo profile"
+}
+
+compose() {
+  "${DOCKER_BIN}" compose --file "${COMPOSE_FILE}" "$@"
+}
+
+require_docker() {
+  command -v "${DOCKER_BIN}" >/dev/null 2>&1 \
+    || die "Docker CLI is unavailable. Enable Docker Desktop WSL integration and retry."
+  "${DOCKER_BIN}" info >/dev/null 2>&1 \
+    || die "Docker daemon is unavailable. Start Docker Desktop and retry."
+  compose version >/dev/null 2>&1 \
+    || die "Docker Compose v2 is unavailable."
+}
+
+static_doctor() {
+  local profile="$1"
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" -m scripts.ops.compose_static_check \
+    --profile "${profile}"
+}
+
+profile_services() {
+  case "$1" in
+    demo) printf '%s\n' postgres qdrant migrate seed api web ;;
+    development) printf '%s\n' postgres qdrant migrate api-dev web-dev ;;
+  esac
+}
+
+running_services() {
+  local profile="$1"
+  compose --profile "${profile}" ps --services --filter status=running
+}
+
+runtime_services() {
+  case "$1" in
+    demo) printf '%s\n' postgres qdrant api web ;;
+    development) printf '%s\n' postgres qdrant api-dev web-dev ;;
+  esac
+}
+
+assert_completed_job() {
+  local profile="$1" service="$2" container state
+  container="$(compose --profile "${profile}" ps --all --quiet "${service}")"
+  [[ -n "${container}" ]] || die "${service} has no completed container"
+  state="$("${DOCKER_BIN}" inspect --format '{{.State.Status}} {{.State.ExitCode}}' "${container}")"
+  [[ "${state}" == "exited 0" ]] || die "${service} did not complete successfully (${state})"
+}
+
+assert_healthy_service() {
+  local profile="$1" service="$2" container health
+  container="$(compose --profile "${profile}" ps --quiet "${service}")"
+  [[ -n "${container}" ]] || die "${service} has no running container"
+  health="$("${DOCKER_BIN}" inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "${container}")"
+  [[ "${health}" == "healthy" ]] || die "${service} is not healthy (${health})"
+}
+
+assert_safe_mounts() {
+  local profile="$1" container source
+  while IFS= read -r container; do
+    [[ -n "${container}" ]] || continue
+    while IFS= read -r source; do
+      [[ -n "${source}" ]] || continue
+      case "${source}" in
+        "${ROOT_DIR}"|"${ROOT_DIR}"/.env|"${ROOT_DIR}"/.env.*|\
+        "${ROOT_DIR}"/research/runs|"${ROOT_DIR}"/research/runs/*|\
+        "${ROOT_DIR}"/output|"${ROOT_DIR}"/output/*|\
+        "${ROOT_DIR}"/storage|"${ROOT_DIR}"/storage/*|\
+        "${ROOT_DIR}"/snapshots|"${ROOT_DIR}"/snapshots/*|\
+        "${ROOT_DIR}"/data/*)
+          if [[ "${source}" == "${ROOT_DIR}/data/demo" ]]; then
+            continue
+          fi
+          die "container ${container} crosses the private host-data boundary"
+          ;;
+      esac
+    done < <("${DOCKER_BIN}" inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' "${container}")
+  done < <(compose --profile "${profile}" ps --all --quiet)
+}
+
+http_check() {
+  local url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl --fail --silent --show-error --max-time 8 "${url}" >/dev/null
+  else
+    "${PYTHON_BIN}" -c \
+      "import urllib.request; urllib.request.urlopen('${url}', timeout=8).read()"
+  fi
+}
+
+command_up() {
+  local profile="$1"
+  validate_profile "${profile}"
+  static_doctor "${profile}"
+  require_docker
+  export MAGICFORGE_TARGET_PROFILE="${profile}"
+  mapfile -t services < <(profile_services "${profile}")
+  compose --profile "${profile}" config --quiet
+  compose --profile "${profile}" up --detach --build "${services[@]}"
+  printf 'MagicForge %s started at http://127.0.0.1:%s. Run ./magicforge doctor %s for readiness.\n' \
+    "${profile}" "${MAGICFORGE_WEB_PORT:-3000}" "${profile}"
+}
+
+command_doctor() {
+  local profile="$1"
+  local mode="${2:-}"
+  validate_profile "${profile}"
+  static_doctor "${profile}"
+  if [[ "${mode}" == "--static" ]]; then
+    return 0
+  fi
+  [[ -z "${mode}" ]] || die "unknown doctor option: ${mode}"
+  require_docker
+  compose --profile "${profile}" config --quiet
+
+  local running
+  running="$(running_services "${profile}")"
+  local missing=0 service
+  while IFS= read -r service; do
+    if ! grep -qxF "${service}" <<<"${running}"; then
+      printf 'doctor: service %s is not running\n' "${service}" >&2
+      missing=1
+    fi
+  done < <(runtime_services "${profile}")
+  (( missing == 0 )) || die "one or more services are unavailable"
+
+  while IFS= read -r service; do
+    assert_healthy_service "${profile}" "${service}"
+  done < <(runtime_services "${profile}")
+  assert_completed_job "${profile}" migrate
+  if [[ "${profile}" == "demo" ]]; then
+    assert_completed_job "${profile}" seed
+  fi
+  assert_safe_mounts "${profile}"
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" -m scripts.ops.doctor \
+    --profile "${profile}" \
+    --api-url "http://127.0.0.1:${MAGICFORGE_API_PORT:-8000}" \
+    --qdrant-url "http://127.0.0.1:${MAGICFORGE_QDRANT_PORT:-6333}" \
+    --corpus "${ROOT_DIR}/data/demo/corpus.json" \
+    || die "Demo corpus identity or point-count verification failed"
+  http_check "http://127.0.0.1:${MAGICFORGE_WEB_PORT:-3000}/login" \
+    || die "Next.js readiness check failed"
+  if [[ "${profile}" == "demo" ]]; then
+    PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" -m scripts.ops.full_stack_smoke \
+      --web-url "http://127.0.0.1:${MAGICFORGE_WEB_PORT:-3000}" \
+      || die "Demo full-stack smoke failed"
+  fi
+  printf 'doctor: %s is ready\n' "${profile}"
+}
+
+command_down() {
+  local profile="$1"
+  shift
+  validate_profile "${profile}"
+  local delete_volumes=false confirmation=""
+  while (($#)); do
+    case "$1" in
+      --volumes) delete_volumes=true; shift ;;
+      --confirm) (($# >= 2)) || die "--confirm requires a value"; confirmation="$2"; shift 2 ;;
+      *) die "unknown down option: $1" ;;
+    esac
+  done
+  if [[ "${delete_volumes}" == true ]]; then
+    [[ "${confirmation}" == "delete-${profile}-volumes" ]] \
+      || die "volume deletion requires --confirm delete-${profile}-volumes"
+  elif [[ -n "${confirmation}" ]]; then
+    die "--confirm is valid only with --volumes"
+  fi
+  require_docker
+  if [[ "${delete_volumes}" == true ]]; then
+    compose --profile "${profile}" down --remove-orphans --volumes
+    printf 'MagicForge %s stopped; project-scoped named volumes were deleted.\n' "${profile}"
+  else
+    compose --profile "${profile}" down --remove-orphans
+    printf 'MagicForge %s stopped; named volumes were preserved.\n' "${profile}"
+  fi
+}
+
+command_logs() {
+  local profile="$1"
+  local selected="${2:-}"
+  validate_profile "${profile}"
+  require_docker
+  mapfile -t allowed < <(profile_services "${profile}")
+  if [[ -n "${selected}" ]]; then
+    printf '%s\n' "${allowed[@]}" | grep -qxF "${selected}" \
+      || die "service is not part of the ${profile} profile"
+    compose --profile "${profile}" logs --follow --tail=200 "${selected}"
+  else
+    compose --profile "${profile}" logs --follow --tail=200 "${allowed[@]}"
+  fi
+}
+
+absolute_path() {
+  "${PYTHON_BIN}" -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).expanduser().resolve())' "$1"
+}
+
+prepare_backup_directory() {
+  local destination="$1"
+  case "${destination}" in
+    /|"${ROOT_DIR}"|"${HOME:-/nonexistent}")
+      die "backup output must be a dedicated directory, not a broad filesystem root"
+      ;;
+  esac
+  if [[ -e "${destination}" ]]; then
+    [[ -d "${destination}" && -w "${destination}" ]] \
+      || die "backup output must be a writable directory"
+  else
+    mkdir -m 700 -p -- "${destination}"
+  fi
+}
+
+command_backup() {
+  local profile="$1" option="${2:-}" destination="${3:-}"
+  validate_ops_profile "${profile}"
+  [[ "${option}" == "--output" && -n "${destination}" ]] \
+    || die "backup requires --output DIRECTORY"
+  require_docker
+  destination="$(absolute_path "${destination}")"
+  prepare_backup_directory "${destination}"
+  export MAGICFORGE_TARGET_PROFILE="${profile}"
+  export MAGICFORGE_BACKUP_DIR="${destination}"
+  export MAGICFORGE_HOST_UID="$(id -u)"
+  export MAGICFORGE_HOST_GID="$(id -g)"
+  compose --profile "${profile}" --profile ops-backup run --rm backup
+}
+
+command_restore() {
+  local profile="$1"
+  shift
+  validate_ops_profile "${profile}"
+  local input="" confirmation=""
+  while (($#)); do
+    case "$1" in
+      --input) (($# >= 2)) || die "--input requires a value"; input="$2"; shift 2 ;;
+      --confirm) (($# >= 2)) || die "--confirm requires a value"; confirmation="$2"; shift 2 ;;
+      *) die "unknown restore option: $1" ;;
+    esac
+  done
+  [[ -n "${input}" ]] || die "restore requires --input BUNDLE_DIRECTORY"
+  [[ "${confirmation}" == "restore-${profile}" ]] \
+    || die "restore requires --confirm restore-${profile}"
+  input="$(absolute_path "${input}")"
+  [[ -d "${input}" ]] || die "backup bundle does not exist"
+  require_docker
+
+  local running app_service web_service
+  running="$(running_services "${profile}")"
+  if [[ "${profile}" == "demo" ]]; then
+    app_service=api; web_service=web
+  else
+    app_service=api-dev; web_service=web-dev
+  fi
+  if grep -qxF "${app_service}" <<<"${running}" \
+    || grep -qxF "${web_service}" <<<"${running}"; then
+    die "stop the API and Web profile before restoring"
+  fi
+
+  export MAGICFORGE_TARGET_PROFILE="${profile}"
+  export MAGICFORGE_BACKUP_DIR="$(dirname -- "${input}")"
+  export MAGICFORGE_RESTORE_SOURCE="$(basename -- "${input}")"
+  export MAGICFORGE_RESTORE_CONFIRM="${confirmation}"
+  export MAGICFORGE_HOST_UID="$(id -u)"
+  export MAGICFORGE_HOST_GID="$(id -g)"
+  compose --profile "${profile}" --profile ops-restore run --rm restore
+  printf 'Restore completed. Start the profile and run doctor before use.\n'
+}
+
+command_audit_public() {
+  local mode="" target="" json_output=false
+  if (($# == 0)); then
+    mode=--source
+    target="${ROOT_DIR}"
+  fi
+  while (($#)); do
+    case "$1" in
+      --source|--artifact)
+        [[ -z "${mode}" && $# -ge 2 ]] || die "audit-public requires exactly one target"
+        mode="$1"; target="$2"; shift 2
+        ;;
+      --json) json_output=true; shift ;;
+      *)
+        [[ -z "${mode}" ]] || die "audit-public requires exactly one target"
+        mode=--artifact; target="$1"; shift
+        ;;
+    esac
+  done
+  if [[ -z "${target}" ]]; then
+    mode=--source
+    target="${ROOT_DIR}"
+  fi
+  target="$(absolute_path "${target}")"
+  if [[ "${mode}" == "--source" ]]; then
+    [[ -d "${target}" ]] || die "source audit target is not a directory"
+  else
+    [[ -d "${target}" || -f "${target}" ]] || die "artifact audit target is unavailable"
+  fi
+  local arguments=("${mode}" "${target}" --allowlist "${ROOT_DIR}/release/public-allowlist.txt")
+  if [[ "${json_output}" == true ]]; then
+    arguments+=(--json)
+  fi
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
+    "${ROOT_DIR}/scripts/audit_public_release.py" "${arguments[@]}"
+}
+
+command_build_public_release() {
+  local output="${ROOT_DIR}/dist/magicforge-public.zip"
+  if (($#)); then
+    [[ "$1" == "--output" && $# == 2 ]] \
+      || die "build-public-release accepts only --output ARCHIVE.zip"
+    output="$(absolute_path "$2")"
+  fi
+  [[ "${output}" == *.zip ]] || die "public release output must end in .zip"
+  PYTHONDONTWRITEBYTECODE=1 "${PYTHON_BIN}" \
+    "${ROOT_DIR}/scripts/build_public_release.py" \
+    --source-root "${ROOT_DIR}" \
+    --allowlist "${ROOT_DIR}/release/public-allowlist.txt" \
+    --output "${output}"
+}
+
+main() {
+  local command="${1:-help}"
+  case "${command}" in
+    help|-h|--help) usage ;;
+    up) (($# == 2)) || die "up requires one profile"; command_up "$2" ;;
+    doctor) (($# == 2 || $# == 3)) || die "doctor requires one profile"; command_doctor "$2" "${3:-}" ;;
+    down) (($# >= 2)) || die "down requires one profile"; shift; command_down "$@" ;;
+    logs) (($# == 2 || $# == 3)) || die "logs accepts a profile and optional service"; command_logs "$2" "${3:-}" ;;
+    backup) (($# == 4)) || die "backup requires PROFILE --output DIRECTORY"; command_backup "$2" "$3" "$4" ;;
+    restore) (($# >= 6)) || die "restore requires PROFILE --input DIR --confirm TOKEN"; shift; command_restore "$@" ;;
+    audit-public) shift; command_audit_public "$@" ;;
+    build-public-release) shift; command_build_public_release "$@" ;;
+    *) die "unknown command: ${command}" ;;
+  esac
+}
+
+main "$@"

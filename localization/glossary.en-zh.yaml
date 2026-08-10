@@ -1,0 +1,812 @@
+schema_version: "1.2"
+document_status: active_governance
+policy_ref: localization/translation-policy.md
+source_locale: en-US
+target_locale: zh-CN
+last_updated: "2026-08-07"
+
+philosophy: "English canonical term + optional Chinese support."
+
+status_values:
+  - draft
+  - reviewed
+  - approved
+  - rejected
+
+display_modes:
+  - english_only
+  - limited_bilingual
+  - localized_ui
+  - product_name_review
+  - source_original
+
+field_semantics:
+  term_english: "Canonical source of truth."
+  term_chinese: "Optional compact support label; never overrides English or implies runtime approval."
+  term_aliases: "Search discovery only unless separately approved."
+  term_explanation: "Optional; use only to resolve governance ambiguity, never to teach the concept."
+
+governance_rules:
+  - "Every entry begins as draft; only human review may set approved."
+  - "Professional magic and cognitive-science terms default to english_only."
+  - "A Chinese value or alias does not authorize Chinese display."
+  - "Unapproved product names fall back to English."
+  - "Aliases never resolve entity identity."
+
+entries:
+  # Product names remain English until human approval.
+  - term_id: product.magic_chat
+    source_term: "Magic Chat"
+    candidate_chinese:
+      - 魔术工作台
+      - 魔术秘谈
+      - 魔术创作对话
+    recommended_chinese: null
+    reason: "Chinese product naming remains open; 魔术智询 is withdrawn because it sounds like AI customer service."
+    term:
+      english: "Magic Chat"
+      chinese: null
+      aliases: []
+      category: product_name
+      status: draft
+    display:
+      mode: product_name_review
+      fallback: "Magic Chat"
+    review_requirements:
+      - product_owner
+      - brand_language
+
+  - term_id: product.evidence_browser
+    source_term: "Evidence Browser"
+    candidate_english:
+      - "Evidence Browser"
+      - "Evidence Archive"
+    candidate_chinese:
+      - 证据档案馆
+      - 证据探索库
+      - 证据档案库
+    recommended_chinese: null
+    reason: "Candidates must balance verification, preservation, provenance, and active discovery."
+    term:
+      english: "Evidence Browser"
+      chinese: null
+      aliases: []
+      category: product_name
+      status: draft
+    display:
+      mode: product_name_review
+      fallback: "Evidence Browser"
+    review_requirements:
+      - product_owner
+      - brand_language
+
+  - term_id: product.knowledge_explorer
+    source_term: "Knowledge Explorer"
+    candidate_chinese:
+      - 知识星图
+      - 魔术知识星图
+    recommended_chinese: null
+    reason: "知识星图 remains a strong proposal but has not received human approval."
+    term:
+      english: "Knowledge Explorer"
+      chinese: null
+      aliases: []
+      category: product_name
+      status: draft
+    display:
+      mode: product_name_review
+      fallback: "Knowledge Explorer"
+    review_requirements:
+      - product_owner
+      - brand_language
+
+  - term_id: product.corpus_dashboard
+    source_term: "Corpus Dashboard"
+    candidate_english:
+      - "Corpus Dashboard"
+      - "Magic Corpus"
+    candidate_chinese:
+      - 知识宇宙观测台
+      - 魔术知识库观测台
+    recommended_chinese: null
+    reason: "语料观测台 is withdrawn because 语料 is too strongly associated with NLP datasets."
+    term:
+      english: "Corpus Dashboard"
+      chinese: null
+      aliases: []
+      category: product_name
+      status: draft
+    display:
+      mode: product_name_review
+      fallback: "Corpus Dashboard"
+    review_requirements:
+      - product_owner
+      - brand_language
+
+  - term_id: product.research_console
+    source_term: "Research Console"
+    candidate_chinese:
+      - 研究实验台
+      - 研究控制台
+    recommended_chinese: null
+    reason: "Both candidates remain review proposals."
+    term:
+      english: "Research Console"
+      chinese: null
+      aliases: []
+      category: product_name
+      status: draft
+    display:
+      mode: product_name_review
+      fallback: "Research Console"
+    review_requirements:
+      - product_owner
+      - brand_language
+
+  # Professional magic terminology: English-only display by default.
+  - term_id: magic.misdirection
+    term:
+      english: "Misdirection"
+      chinese: null
+      aliases:
+        - 注意转移
+        - 注意引导
+      category: magic_theory
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.false_transfer
+    term:
+      english: "False Transfer"
+      chinese: null
+      aliases:
+        - 假转移
+        - 假传递
+      category: magic_technique
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.palm
+    term:
+      english: "Palm"
+      chinese: 藏牌手法
+      aliases:
+        - 掌藏
+      category: magic_technique
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.force
+    term:
+      english: "Force"
+      chinese: 强选
+      aliases:
+        - 强制选择
+      category: magic_technique
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.switch
+    term:
+      english: "Switch"
+      chinese: null
+      aliases:
+        - 偷换
+        - 替换
+      category: magic_technique
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.vanish
+    term:
+      english: "Vanish"
+      chinese: 消失
+      aliases: []
+      category: magic_effect
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.steal
+    term:
+      english: "Steal"
+      chinese: null
+      aliases:
+        - 秘密取入
+      category: magic_technique
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.load
+    term:
+      english: "Load"
+      chinese: null
+      aliases:
+        - 秘密置入
+      category: magic_technique
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.cold_reading
+    term:
+      english: "Cold Reading"
+      chinese: 冷读
+      aliases: []
+      category: magic_theory
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.effect
+    term:
+      english: "Effect"
+      chinese: null
+      aliases:
+        - 魔术效果
+        - 效果
+      category: magic_ontology
+      status: draft
+      explanation: "MagicForge ontology sense; keep separate from a scientific effect."
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.method
+    term:
+      english: "Method"
+      chinese: null
+      aliases:
+        - 秘密方法
+        - 方法
+      category: magic_ontology
+      status: draft
+      explanation: "MagicForge ontology sense; keep separate from research method."
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.technique
+    term:
+      english: "Technique"
+      chinese: null
+      aliases:
+        - 技法
+        - 技巧
+      category: magic_ontology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - magic_practitioner
+
+  - term_id: magic.performer
+    term:
+      english: "Performer"
+      chinese: 表演者
+      aliases:
+        - 魔术表演者
+      category: magic_ontology
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - magic_practitioner
+
+  # Cognitive-science terminology: English-only display; Chinese is search metadata.
+  - term_id: science.inattentional_blindness
+    term:
+      english: "Inattentional Blindness"
+      chinese: null
+      aliases:
+        - 非注意盲视
+        - 无意视盲
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.change_blindness
+    term:
+      english: "Change Blindness"
+      chinese: null
+      aliases:
+        - 变化盲视
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.cognitive_load
+    term:
+      english: "Cognitive Load"
+      chinese: null
+      aliases:
+        - 认知负荷
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.priming
+    term:
+      english: "Priming"
+      chinese: null
+      aliases:
+        - 启动效应
+        - 启动
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.prediction_error
+    term:
+      english: "Prediction Error"
+      chinese: null
+      aliases:
+        - 预测误差
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.cognitive_mechanism
+    term:
+      english: "Cognitive Mechanism"
+      chinese: null
+      aliases:
+        - 认知机制
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.attention
+    term:
+      english: "Attention"
+      chinese: null
+      aliases:
+        - 注意
+        - 注意力
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.selective_attention
+    term:
+      english: "Selective Attention"
+      chinese: null
+      aliases:
+        - 选择性注意
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  - term_id: science.psychology_principle
+    term:
+      english: "Psychology Principle"
+      chinese: null
+      aliases:
+        - 心理原则
+        - Psychological Principle
+        - Psychological Principles
+        - PsychologyPrinciple
+      category: magic_ontology
+      status: draft
+      explanation: "Applied ontology entity; keep separate from Cognitive Mechanism."
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+      - magic_practitioner
+
+  - term_id: science.memory_reconstruction
+    term:
+      english: "Memory Reconstruction"
+      chinese: null
+      aliases:
+        - 记忆重建
+        - 记忆重构
+      category: cognitive_science
+      status: draft
+    display:
+      mode: english_only
+    review_requirements:
+      - cognitive_science_editor
+
+  # Limited bilingual support: compact labels only.
+  - term_id: evidence.evidence_card
+    term:
+      english: "Evidence Card"
+      chinese: 证据卡
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.knowledge_node
+    term:
+      english: "Knowledge Node"
+      chinese: 知识节点
+      aliases: []
+      category: knowledge_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.source
+    term:
+      english: "Source"
+      chinese: 来源
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - citation_reviewer
+
+  - term_id: evidence.confidence
+    term:
+      english: "Confidence"
+      chinese: 置信度
+      aliases: []
+      category: evidence_model
+      status: draft
+      explanation: "Generic label only; do not merge Extraction Confidence and Evidence Confidence."
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.extraction_confidence
+    term:
+      english: "Extraction Confidence"
+      chinese: 抽取置信度
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.evidence_confidence
+    term:
+      english: "Evidence Confidence"
+      chinese: 证据置信度
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.claim
+    term:
+      english: "Claim"
+      chinese: 主张
+      aliases:
+        - 论断
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.evidence_class
+    term:
+      english: "Evidence Class"
+      chinese: 证据类别
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.knowledge_origin
+    term:
+      english: "Knowledge Origin"
+      chinese: 知识来源类型
+      aliases: []
+      category: evidence_model
+      status: draft
+      explanation: "Keep separate from the Source entity."
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.provenance
+    term:
+      english: "Provenance"
+      chinese: 溯源
+      aliases:
+        - 溯源信息
+      category: evidence_governance
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - citation_reviewer
+
+  - term_id: evidence.locator
+    term:
+      english: "Locator"
+      chinese: 定位
+      aliases:
+        - 可核验定位
+      category: evidence_governance
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - citation_reviewer
+
+  - term_id: evidence.limitations
+    term:
+      english: "Limitations"
+      chinese: 局限
+      aliases: []
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.contradicting_evidence
+    term:
+      english: "Contradicting Evidence"
+      chinese: 相反证据
+      aliases:
+        - 相悖证据
+      category: evidence_model
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: evidence.citation
+    term:
+      english: "Citation"
+      chinese: 引用
+      aliases:
+        - 引文
+      category: citation
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - citation_reviewer
+
+  - term_id: governance.source_approval
+    term:
+      english: "Source Approval"
+      chinese: 来源审批
+      aliases: []
+      category: governance
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: governance.claim_review
+    term:
+      english: "Claim Review"
+      chinese: 主张审核
+      aliases: []
+      category: governance
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  - term_id: governance.storage_authorization
+    term:
+      english: "Storage Authorization"
+      chinese: 存储授权
+      aliases: []
+      category: governance
+      status: draft
+    display:
+      mode: limited_bilingual
+    review_requirements:
+      - evidence_governance
+
+  # Ordinary UI language may be localized normally after approval.
+  - term_id: ui.search
+    term:
+      english: "Search"
+      chinese: 搜索
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  - term_id: ui.settings
+    term:
+      english: "Settings"
+      chinese: 设置
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  - term_id: ui.filter
+    term:
+      english: "Filter"
+      chinese: 筛选
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  - term_id: ui.navigation
+    term:
+      english: "Navigation"
+      chinese: 导航
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  - term_id: ui.save
+    term:
+      english: "Save"
+      chinese: 保存
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  - term_id: ui.delete
+    term:
+      english: "Delete"
+      chinese: 删除
+      aliases: []
+      category: ui_action
+      status: draft
+    display:
+      mode: localized_ui
+    review_requirements:
+      - language_reviewer
+
+  # Technical terms always preserve exact form.
+  - term_id: technology.qdrant
+    term:
+      english: "Qdrant"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []
+
+  - term_id: technology.glm
+    term:
+      english: "GLM"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []
+
+  - term_id: technology.react
+    term:
+      english: "React"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []
+
+  - term_id: technology.nextjs
+    term:
+      english: "Next.js"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []
+
+  - term_id: technology.github
+    term:
+      english: "GitHub"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []
+
+  - term_id: technology.vercel
+    term:
+      english: "Vercel"
+      chinese: null
+      aliases: []
+      category: technology
+      status: draft
+    display:
+      mode: english_only
+    review_requirements: []

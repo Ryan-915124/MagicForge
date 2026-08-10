@@ -1,0 +1,24 @@
+name: magicforge-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: magicforge
+      POSTGRES_USER: magicforge
+      # Local development only. Never reuse this credential outside this file.
+      POSTGRES_PASSWORD: magicforge_local_only
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U magicforge -d magicforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    volumes:
+      - magicforge-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  magicforge-postgres-data:

@@ -1,0 +1,3 @@
+# Rename this file to CODEOWNERS only after replacing the placeholder with the
+# verified GitHub login of the project maintainer. Do not guess ownership.
+* @VERIFIED-MAINTAINER

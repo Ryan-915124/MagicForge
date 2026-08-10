@@ -1,0 +1,270 @@
+schema_version: "1.2"
+document_status: active_governance
+policy_ref: localization/translation-policy.md
+source_locale: en-US
+target_locale: zh-CN
+last_updated: "2026-08-07"
+
+default_action: classify_before_translation
+
+action_values:
+  preserve_exact: "Keep original bytes, casing, and punctuation."
+  preserve_english_only: "Display English only; Chinese metadata is not display content."
+  limited_bilingual_support: "Keep English canonical and add only an approved compact Chinese label."
+  normal_ui_translation: "Allow approved natural Chinese UI wording."
+  reviewed_supplement: "Keep the original and add a separately reviewed supplement."
+
+precedence:
+  - protected_original_content
+  - protected_identifier
+  - protected_professional_term
+  - approved_display_mode
+  - approved_glossary_entry
+  - approved_translation_memory
+  - english_fallback
+
+alias_policy:
+  purpose: search_discovery_only
+  automatic_display: forbidden
+  canonical_replacement: forbidden
+  translation_memory_ingestion: forbidden
+  entity_resolution: forbidden
+  ontology_rewrite: forbidden
+  runtime_label_use: forbidden_unless_separately_approved
+
+exact_terms:
+  - value: MagicForge
+    action: preserve_exact
+
+professional_magic_english_only:
+  action: preserve_english_only
+  canonical_language: en
+  terms:
+    - Misdirection
+    - False Transfer
+    - Switch
+    - Steal
+    - Load
+    - Effect
+    - Method
+    - Technique
+  chinese_metadata_role: search_discovery_only
+
+professional_magic_limited_bilingual_candidates:
+  action: limited_bilingual_support
+  canonical_language: en
+  runtime_requires_status: approved
+  terms:
+    Palm: 藏牌手法
+    Force: 强选
+    Vanish: 消失
+    Cold Reading: 冷读
+    Performer: 表演者
+  rule: "Chinese must remain a compact label; English remains visible and canonical."
+
+cognitive_science_english_only:
+  action: preserve_english_only
+  canonical_language: en
+  terms:
+    - Inattentional Blindness
+    - Change Blindness
+    - Cognitive Load
+    - Priming
+    - Prediction Error
+    - Cognitive Mechanism
+    - Attention
+    - Selective Attention
+    - Psychology Principle
+    - Memory Reconstruction
+  chinese_metadata_role: search_discovery_only
+
+limited_bilingual_evidence_and_governance:
+  action: limited_bilingual_support
+  canonical_language: en
+  runtime_requires_status: approved
+  terms:
+    Evidence Card: 证据卡
+    Knowledge Node: 知识节点
+    Source: 来源
+    Confidence: 置信度
+    Extraction Confidence: 抽取置信度
+    Evidence Confidence: 证据置信度
+    Claim: 主张
+    Evidence Class: 证据类别
+    Knowledge Origin: 知识来源类型
+    Provenance: 溯源
+    Locator: 定位
+    Limitations: 局限
+    Contradicting Evidence: 相反证据
+    Citation: 引用
+    Source Approval: 来源审批
+    Claim Review: 主张审核
+    Storage Authorization: 存储授权
+  rule: "No definitions or explanatory sentences may be rendered as the Chinese label."
+
+pending_product_names:
+  action: preserve_english_only
+  canonical_language: en
+  exact_english_fallback: true
+  chinese_candidate_runtime: forbidden_until_human_approved
+  terms:
+    - Magic Chat
+    - Evidence Browser
+    - Knowledge Explorer
+    - Corpus Dashboard
+    - Research Console
+
+technology_names:
+  action: preserve_exact
+  terms:
+    - Qdrant
+    - GLM
+    - React
+    - Next.js
+    - GitHub
+    - Vercel
+    - FastAPI
+    - TypeScript
+    - API
+    - JSON
+    - JSONL
+    - YAML
+    - DOI
+    - ISBN
+
+protected_entity_classes:
+  - class_id: author_names
+    fields:
+      - source.author
+      - source.authors
+      - paper.authors
+    action: preserve_exact
+    automatic_translation: forbidden
+    allowed_supplement: human_reviewed_alias_only
+
+  - class_id: performer_names
+    fields:
+      - entity.name
+      - performer.name
+      - relation.performer
+    action: preserve_exact
+    automatic_translation: forbidden
+    allowed_supplement: human_reviewed_alias_only
+    localized_alias_entity_resolution: forbidden
+
+  - class_id: paper_titles
+    fields:
+      - source.title
+      - paper.title
+      - citation.title
+    action: preserve_exact
+    automatic_translation: forbidden
+    allowed_supplement: human_reviewed_translated_title_only
+
+  - class_id: book_and_source_titles
+    fields:
+      - book.title
+      - source.title
+      - publication.title
+    action: preserve_exact
+    automatic_translation: forbidden
+    allowed_supplement: human_reviewed_translated_title_only
+
+  - class_id: citations
+    fields:
+      - citation
+      - citation_text
+      - formatted_citation
+      - bibliography_entry
+    action: preserve_exact
+    automatic_translation: forbidden
+
+protected_knowledge_content:
+  action: preserve_exact
+  ui_translation_extraction: forbidden
+  future_workflow: separately_governed_knowledge_content_localization
+  fields:
+    - evidence_card.claim
+    - claim.text
+    - evidence_card.excerpt
+    - source.quote
+    - evidence_card.limitations
+    - population_context
+    - performance_context
+    - magic_application
+    - interpretation
+
+protected_identifiers:
+  action: preserve_exact
+  values:
+    - DOI
+    - ISBN
+    - ORCID
+    - URL
+    - UUID
+    - source_id
+    - evidence_card_id
+    - knowledge_node_id
+    - relationship_id
+    - run_id
+    - manifest_id
+    - receipt_id
+    - collection_name
+    - model_id
+    - schema_version
+    - enum_value
+    - JSON_key
+    - API_path
+    - environment_variable
+
+normal_translation_categories:
+  action: normal_ui_translation
+  seed_terms:
+    Search: 搜索
+    Settings: 设置
+    Filter: 筛选
+    Navigation: 导航
+    Save: 保存
+    Delete: 删除
+  exclusions:
+    - product_name
+    - professional_term
+    - technical_identifier
+    - source_content
+    - knowledge_content
+    - citation
+
+reviewed_supplement_requirements:
+  required_fields:
+    - original_value
+    - supplemental_chinese
+    - language
+    - review_status
+    - reviewer
+    - review_date
+  replace_original: forbidden
+  entity_resolution: forbidden
+
+current_phase_guards:
+  runtime_i18n_enabled: true
+  canonical_catalog: frontend/src/lib/i18n/messages.ts
+  machine_candidate_generation: explicit_glm_flag_only
+  automatic_runtime_application: forbidden
+  protected_content_model_submission: forbidden
+  external_translation_platforms: forbidden
+  allowed_llm_provider: GLM
+  translation_memory_unit_count: 0
+  machine_may_set_approved: false
+  unresolved_term_fallback: english
+
+blocked_failures:
+  - protected_english_overwritten
+  - english_only_term_rendered_with_chinese
+  - search_alias_rendered_as_label
+  - search_alias_entered_translation_memory
+  - unapproved_limited_bilingual_label_used_at_runtime
+  - product_candidate_used_at_runtime
+  - technical_name_translated
+  - citation_entered_ui_translation
+  - knowledge_content_entered_ui_translation
+  - translated_alias_used_for_entity_resolution

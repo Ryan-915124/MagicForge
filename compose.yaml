@@ -1,0 +1,538 @@
+name: magicforge
+
+x-demo-environment: &demo-environment
+  MAGICFORGE_PROFILE: demo
+  MAGICFORGE_MODE: bootstrap
+  BOOTSTRAP_ALLOW_ANONYMOUS_READS: "true"
+  AUTH_COOKIE_SECURE: "false"
+  AUTH_ALLOWED_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
+  EMBEDDING_DIMENSION: "384"
+  GLM_API_KEY: ""
+  PRODUCTION_GLM_EXTRACTION_ENABLED: "false"
+  PRODUCTION_QDRANT_WRITES_ENABLED: "false"
+
+x-production-environment: &production-environment
+  MAGICFORGE_PROFILE: production
+  MAGICFORGE_MODE: production
+  DATABASE_URL: ${MAGICFORGE_PRODUCTION_DATABASE_URL:-}
+  DATABASE_CONNECT_TIMEOUT_SECONDS: "5"
+  BOOTSTRAP_ALLOW_ANONYMOUS_READS: "false"
+  AUTH_COOKIE_SECURE: "true"
+  AUTH_ALLOWED_ORIGINS: ${MAGICFORGE_PRODUCTION_AUTH_ALLOWED_ORIGINS:-}
+  ACTIVE_CORPUS_ID: ${MAGICFORGE_PRODUCTION_CORPUS_ID:-}
+  QDRANT_URL: http://qdrant-production:6333
+  QDRANT_COLLECTION_NAME: ${MAGICFORGE_PRODUCTION_COLLECTION:-}
+  EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+  EMBEDDING_DIMENSION: "384"
+  GLM_API_KEY: ${MAGICFORGE_PRODUCTION_GLM_API_KEY:-}
+  GLM_MODEL: ${MAGICFORGE_PRODUCTION_GLM_MODEL:-glm-4.7}
+  PRODUCTION_GLM_EXTRACTION_ENABLED: "false"
+  PRODUCTION_QDRANT_WRITES_ENABLED: "false"
+
+x-development-environment: &development-environment
+  MAGICFORGE_PROFILE: development
+  MAGICFORGE_MODE: bootstrap
+  DATABASE_URL: postgresql+psycopg://magicforge:magicforge_demo_only@postgres:5432/magicforge
+  DATABASE_CONNECT_TIMEOUT_SECONDS: "5"
+  BOOTSTRAP_ALLOW_ANONYMOUS_READS: "true"
+  AUTH_COOKIE_SECURE: "false"
+  AUTH_ALLOWED_ORIGINS: http://127.0.0.1:3000,http://localhost:3000
+  ACTIVE_CORPUS_ROOT: ${MAGICFORGE_DEVELOPMENT_CORPUS_ROOT:-/var/lib/magicforge/development-corpus/not-configured}
+  ACTIVE_CORPUS_ID: ${MAGICFORGE_DEVELOPMENT_CORPUS_ID:-}
+  ACTIVE_CORPUS_MANIFEST_PATH: ${MAGICFORGE_DEVELOPMENT_MANIFEST_PATH:-}
+  ACTIVE_CORPUS_RECEIPT_PATH: ${MAGICFORGE_DEVELOPMENT_RECEIPT_PATH:-}
+  ACTIVE_CORPUS_MANIFEST_SCHEMA: ${MAGICFORGE_DEVELOPMENT_MANIFEST_SCHEMA:-}
+  ACTIVE_QDRANT_STORAGE_KIND: remote
+  QDRANT_URL: http://qdrant:6333
+  QDRANT_BOOTSTRAP_COLLECTION_NAME: ${MAGICFORGE_DEVELOPMENT_COLLECTION:-}
+  EMBEDDING_MODEL: BAAI/bge-small-en-v1.5
+  EMBEDDING_DIMENSION: "384"
+  GLM_API_KEY: ${MAGICFORGE_DEVELOPMENT_GLM_API_KEY:-}
+  GLM_MODEL: ${MAGICFORGE_DEVELOPMENT_GLM_MODEL:-glm-4.7}
+  PRODUCTION_GLM_EXTRACTION_ENABLED: "false"
+  PRODUCTION_QDRANT_WRITES_ENABLED: "false"
+
+x-api-base: &api-base
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+    target: runtime
+  image: magicforge-api:0.3.0
+  restart: unless-stopped
+  environment: *demo-environment
+  depends_on:
+    postgres:
+      condition: service_healthy
+    qdrant:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+    seed:
+      condition: service_completed_successfully
+  networks:
+    - backend
+    - edge
+  read_only: true
+  tmpfs:
+    - /tmp:size=128m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  healthcheck:
+    test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).read()
+    interval: 15s
+    timeout: 5s
+    start_period: 45s
+    retries: 8
+
+x-web-base: &web-base
+  build:
+    context: .
+    dockerfile: frontend/Dockerfile
+    target: runtime
+  image: magicforge-web:0.1.0
+  restart: unless-stopped
+  environment:
+    MAGICFORGE_API_URL: http://api:8000
+    MAGICFORGE_REQUIRE_SECURE_COOKIES: "false"
+    NEXT_TELEMETRY_DISABLED: "1"
+  depends_on:
+    api:
+      condition: service_healthy
+  networks:
+    - edge
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  healthcheck:
+    test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+    interval: 15s
+    timeout: 5s
+    start_period: 30s
+    retries: 8
+
+services:
+  postgres:
+    image: postgres:16.6-alpine3.20
+    profiles: [demo, development, ops-backup, ops-restore]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: magicforge
+      POSTGRES_USER: magicforge
+      POSTGRES_PASSWORD: magicforge_demo_only
+    ports:
+      - 127.0.0.1:${MAGICFORGE_POSTGRES_PORT:-5432}:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U magicforge -d magicforge]
+      interval: 5s
+      timeout: 5s
+      start_period: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    profiles: [demo, development, ops-backup, ops-restore]
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${MAGICFORGE_QDRANT_PORT:-6333}:6333
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - backend
+    healthcheck:
+      test: [CMD-SHELL, "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+    image: magicforge-api:0.3.0
+    profiles: [demo, development]
+    command: [alembic, upgrade, head]
+    restart: no
+    environment:
+      DATABASE_URL: postgresql+psycopg://magicforge:magicforge_demo_only@postgres:5432/magicforge
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+    image: magicforge-api:0.3.0
+    profiles: [demo]
+    command: [python, -m, scripts.ops.seed_demo_qdrant]
+    restart: no
+    environment:
+      MAGICFORGE_TARGET_PROFILE: ${MAGICFORGE_TARGET_PROFILE:-demo}
+      QDRANT_URL: http://qdrant:6333
+      EMBEDDING_DIMENSION: "384"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - backend
+      - edge
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api:
+    <<: *api-base
+    profiles: [demo]
+    ports:
+      - 127.0.0.1:${MAGICFORGE_API_PORT:-8000}:8000
+
+  web:
+    <<: *web-base
+    profiles: [demo]
+    ports:
+      - 127.0.0.1:${MAGICFORGE_WEB_PORT:-3000}:3000
+    volumes:
+      - next-cache:/opt/magicforge/frontend/.next/cache
+
+  api-dev:
+    <<: *api-base
+    profiles: [development]
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: development
+    image: magicforge-api-dev:0.3.0
+    environment: *development-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - 127.0.0.1:${MAGICFORGE_API_PORT:-8000}:8000
+    volumes:
+      - development-model-cache:/home/magicforge/.cache
+      - ./analysis:/opt/magicforge/analysis:ro
+      - ./app:/opt/magicforge/app:ro
+      - ./data/demo:/opt/magicforge/data/demo:ro
+      - ./knowledge:/opt/magicforge/knowledge:ro
+      - ./llm:/opt/magicforge/llm:ro
+      - ./persistence:/opt/magicforge/persistence:ro
+      - ./prompts:/opt/magicforge/prompts:ro
+      - ./retrieval:/opt/magicforge/retrieval:ro
+      - ./security:/opt/magicforge/security:ro
+      - development-corpus:/var/lib/magicforge/development-corpus:ro
+      - ./research/__init__.py:/opt/magicforge/research/__init__.py:ro
+      - ./research/acquisition:/opt/magicforge/research/acquisition:ro
+      - ./research/bootstrap:/opt/magicforge/research/bootstrap:ro
+      - ./research/citation:/opt/magicforge/research/citation:ro
+      - ./research/evidence:/opt/magicforge/research/evidence:ro
+      - ./research/extraction:/opt/magicforge/research/extraction:ro
+      - ./research/review:/opt/magicforge/research/review:ro
+      - ./research/search:/opt/magicforge/research/search:ro
+
+  web-dev:
+    profiles: [development]
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: development
+    image: magicforge-web-dev:0.1.0
+    restart: unless-stopped
+    environment:
+      MAGICFORGE_API_URL: http://api-dev:8000
+      MAGICFORGE_REQUIRE_SECURE_COOKIES: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api-dev:
+        condition: service_healthy
+    networks:
+      - edge
+    ports:
+      - 127.0.0.1:${MAGICFORGE_WEB_PORT:-3000}:3000
+    volumes:
+      - ./frontend/src:/opt/magicforge/frontend/src:ro
+      - next-dev-cache:/opt/magicforge/frontend/.next
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 45s
+      retries: 8
+
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: ops
+    image: magicforge-ops:0.3.0
+    profiles: [ops-backup]
+    command: [backup]
+    restart: no
+    user: ${MAGICFORGE_HOST_UID:-1000}:${MAGICFORGE_HOST_GID:-1000}
+    environment:
+      DATABASE_URL: postgresql+psycopg://magicforge:magicforge_demo_only@postgres:5432/magicforge
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION_NAME: magicforge_demo_v01
+      MAGICFORGE_TARGET_PROFILE: ${MAGICFORGE_TARGET_PROFILE:-demo}
+      MAGICFORGE_OPS_OPERATION: backup
+      HOME: /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - type: bind
+        source: ${MAGICFORGE_BACKUP_DIR:-./.magicforge/backups}
+        target: /backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  restore:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: ops
+    image: magicforge-ops:0.3.0
+    profiles: [ops-restore]
+    command: [restore]
+    restart: no
+    user: ${MAGICFORGE_HOST_UID:-1000}:${MAGICFORGE_HOST_GID:-1000}
+    environment:
+      DATABASE_URL: postgresql+psycopg://magicforge:magicforge_demo_only@postgres:5432/magicforge
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_COLLECTION_NAME: magicforge_demo_v01
+      MAGICFORGE_TARGET_PROFILE: ${MAGICFORGE_TARGET_PROFILE:-demo}
+      MAGICFORGE_OPS_OPERATION: restore
+      MAGICFORGE_RESTORE_SOURCE: ${MAGICFORGE_RESTORE_SOURCE:-}
+      MAGICFORGE_RESTORE_CONFIRM: ${MAGICFORGE_RESTORE_CONFIRM:-}
+      HOME: /tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - backend
+    volumes:
+      - type: bind
+        source: ${MAGICFORGE_BACKUP_DIR:-./.magicforge/backups}
+        target: /backups
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  postgres-production:
+    image: postgres:16.6-alpine3.20
+    profiles: [production]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: magicforge
+      POSTGRES_USER: magicforge
+      POSTGRES_PASSWORD: ${MAGICFORGE_PRODUCTION_DB_PASSWORD:-}
+    volumes:
+      - postgres-production-data:/var/lib/postgresql/data
+    networks:
+      - production-backend
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U magicforge -d magicforge]
+      interval: 5s
+      timeout: 5s
+      start_period: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  qdrant-production:
+    image: qdrant/qdrant:v1.13.6
+    profiles: [production]
+    restart: unless-stopped
+    volumes:
+      - qdrant-production-data:/qdrant/storage
+    networks:
+      - production-backend
+    healthcheck:
+      test: [CMD-SHELL, "bash -c ':> /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  migrate-production:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+    image: magicforge-api:0.3.0
+    profiles: [production]
+    command: [alembic, upgrade, head]
+    restart: no
+    environment:
+      DATABASE_URL: ${MAGICFORGE_PRODUCTION_DATABASE_URL:-}
+    depends_on:
+      postgres-production:
+        condition: service_healthy
+    networks:
+      - production-backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  api-production:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: runtime
+    image: magicforge-api:0.3.0
+    profiles: [production]
+    restart: unless-stopped
+    environment: *production-environment
+    depends_on:
+      postgres-production:
+        condition: service_healthy
+      qdrant-production:
+        condition: service_healthy
+      migrate-production:
+        condition: service_completed_successfully
+    networks:
+      - production-backend
+      - production-edge
+    ports:
+      - 127.0.0.1:${MAGICFORGE_PRODUCTION_API_PORT:-8100}:8000
+    volumes:
+      - production-model-cache:/home/magicforge/.cache
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).read()
+      interval: 15s
+      timeout: 5s
+      start_period: 45s
+      retries: 8
+
+  web-production:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: runtime
+    image: magicforge-web:0.1.0
+    profiles: [production]
+    restart: unless-stopped
+    environment:
+      MAGICFORGE_API_URL: http://api-production:8000
+      MAGICFORGE_REQUIRE_SECURE_COOKIES: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      api-production:
+        condition: service_healthy
+    networks:
+      - production-edge
+    ports:
+      - 127.0.0.1:${MAGICFORGE_PRODUCTION_WEB_PORT:-3100}:3000
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 8
+
+networks:
+  backend:
+    internal: true
+  edge:
+  production-backend:
+    internal: true
+  production-edge:
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  next-cache:
+  next-dev-cache:
+  postgres-production-data:
+  qdrant-production-data:
+  development-corpus:
+  development-model-cache:
+  production-model-cache:

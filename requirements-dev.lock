@@ -1,0 +1,6 @@
+# Install after requirements.lock for local verification and CI.
+iniconfig==2.3.0
+pluggy==1.6.0
+Pygments==2.20.0
+pytest==9.1.1
+reportlab==4.5.1

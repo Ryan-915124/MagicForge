@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible MagicForge defect without including private corpus content.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never paste API keys, private source text, method secrets, or local database contents.
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Profile
+      options: [demo, development, production]
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the expected behavior and a minimal reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Sanitized Doctor output
+      description: Remove credentials, private paths, source text, and identifiers first.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials and private corpus material.
+          required: true

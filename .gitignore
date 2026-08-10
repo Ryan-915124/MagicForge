@@ -1,0 +1,51 @@
+.env
+.env.*
+!.env.example
+!.env.*.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+/.magicforge/
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.db
+*.dump
+*.pem
+*.key
+*.p12
+*.pfx
+
+# MagicForge frontend
+frontend/node_modules/
+frontend/.next/
+frontend/*.tsbuildinfo
+frontend/.env.local
+frontend/.env.*.local
+
+# Local-first localization run artifacts and caches
+localization/runs/
+localization/.cache/
+
+# Governed/private corpus material. Public releases are assembled only through
+# release/public-allowlist.txt; none of these trees belong in source control.
+/research/runs/
+/data/*
+!/data/demo/
+!/data/demo/**
+/output/
+/storage/
+/snapshots/
+**/qdrant_storage*/
+**/qdrant_snapshots*/
+docs/screenshots/
+.playwright-cli/
+
+# Reproducible public artifacts are build outputs, not source files.
+/dist/
+/release/artifacts/

@@ -1,0 +1,1 @@
+"""MagicForge API package."""

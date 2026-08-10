@@ -1,0 +1,36 @@
+name: Build public source release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  source-artifact:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.3"
+      - run: python scripts/audit_public_release.py --source .
+      - run: python scripts/build_public_release.py --output dist/magicforge-public.zip
+      - run: unzip -q dist/magicforge-public.zip -d dist/extracted
+      - run: python scripts/audit_public_release.py --source dist/extracted/magicforge-public
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: magicforge-public-source-${{ github.ref_name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 30
