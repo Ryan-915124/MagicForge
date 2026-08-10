@@ -494,7 +494,7 @@ def test_payload_directory_must_equal_complete_prepared_result_set(
 
 
 def test_official_v02_bundle_dry_run_is_exactly_29_and_offline(
-    monkeypatch, capsys
+    monkeypatch, capsys, synthetic_official_cli_bundle
 ) -> None:
     monkeypatch.setattr(
         cli.getpass,

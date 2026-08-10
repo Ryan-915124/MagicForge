@@ -75,6 +75,7 @@ frontend/package-lock.json
 frontend/package.json
 frontend/postcss.config.mjs
 frontend/tsconfig.json
+frontend/scripts/localization-inventory.mjs
 frontend/src/**
 frontend/tests/**
 

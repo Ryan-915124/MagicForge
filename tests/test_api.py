@@ -19,6 +19,22 @@ create_app = main_module.create_app
 
 
 BOOTSTRAP_ROOT = PROJECT_ROOT / "research/runs/bootstrap-002"
+CONSOLE_PROJECT_ROOT = PROJECT_ROOT
+
+
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_corpus(synthetic_bootstrap_corpus):
+    global BOOTSTRAP_ROOT, CONSOLE_PROJECT_ROOT
+
+    previous = (BOOTSTRAP_ROOT, CONSOLE_PROJECT_ROOT)
+    BOOTSTRAP_ROOT = synthetic_bootstrap_corpus.root
+    CONSOLE_PROJECT_ROOT = synthetic_bootstrap_corpus.project_root
+    _read_models.cache_clear()
+    try:
+        yield
+    finally:
+        _read_models.cache_clear()
+        BOOTSTRAP_ROOT, CONSOLE_PROJECT_ROOT = previous
 
 
 def _bootstrap_settings(**changes) -> Settings:
@@ -142,7 +158,9 @@ def _read_models():
     active_corpus = load_active_corpus(_bootstrap_settings())
     knowledge_read_model = ProjectedKnowledgeReadModel(active_corpus)
     knowledge_read_model.validate()
-    research_console_read_model = ResearchConsoleReadModel(active_corpus)
+    research_console_read_model = ResearchConsoleReadModel(
+        active_corpus, CONSOLE_PROJECT_ROOT
+    )
     return active_corpus, knowledge_read_model, research_console_read_model
 
 
@@ -197,7 +215,7 @@ async def _request(method: str, path: str, **kwargs):
 
 
 @pytest.mark.anyio
-async def test_health_reports_configuration() -> None:
+async def test_health_reports_configuration(synthetic_bootstrap_corpus) -> None:
     response = await _request("GET", "/health")
     assert response.status_code == 200
     body = response.json()
@@ -207,37 +225,48 @@ async def test_health_reports_configuration() -> None:
     assert body["collection"] == "magicforge_bootstrap_v03"
     assert body["schema_version"] == "bootstrap-qdrant-0.2"
     assert body["manifest_schema_version"] == "bootstrap-manifest-0.2"
-    assert body["manifest_id"] == "f7b2da19-bfc2-55de-8850-2d58638b5031"
+    assert body["manifest_id"] == synthetic_bootstrap_corpus.manifest_id
     assert body["qdrant_url"] == "local"
 
 
 @pytest.mark.anyio
-async def test_stats_exposes_audited_projection_distributions() -> None:
+async def test_stats_exposes_audited_projection_distributions(
+    synthetic_bootstrap_corpus,
+) -> None:
     response = await _request("GET", "/stats")
 
     assert response.status_code == 200
     body = response.json()
     assert body["run_id"] == "bootstrap-002"
-    assert body["sources"] == 219
-    assert body["sources_with_projected_knowledge"] == 185
-    assert body["source_categories"] == {"academic": 88, "practitioner": 131}
+    assert body["sources"] == synthetic_bootstrap_corpus.source_count
+    assert (
+        body["sources_with_projected_knowledge"]
+        == synthetic_bootstrap_corpus.source_count
+    )
+    assert body["source_categories"] == synthetic_bootstrap_corpus.source_categories
     assert body["distributions"]["scope"] == "projected_points"
-    assert body["distributions"]["domain_memberships"]["theory"] == 558
-    assert body["distributions"]["knowledge_origins"] == {
-        "expert_practice": 444,
-        "personal_interpretation": 56,
-        "scientific_evidence": 297,
-    }
+    assert (
+        body["distributions"]["domain_memberships"]
+        == synthetic_bootstrap_corpus.domain_memberships
+    )
+    assert (
+        body["distributions"]["knowledge_origins"]
+        == synthetic_bootstrap_corpus.knowledge_origins
+    )
     assert body["governance"] == {
-        "pending_human_review_sources": 219,
-        "contradiction_checks_pending": 632,
-        "procedural_method_projections_quarantined": 104,
+        "pending_human_review_sources": synthetic_bootstrap_corpus.source_count,
+        "contradiction_checks_pending": (
+            synthetic_bootstrap_corpus.evidence_card_count
+        ),
+        "procedural_method_projections_quarantined": 0,
         "production_collection_touched": False,
     }
 
 
 @pytest.mark.anyio
-async def test_research_console_separates_configuration_from_audited_state() -> None:
+async def test_research_console_separates_configuration_from_audited_state(
+    synthetic_bootstrap_corpus,
+) -> None:
     secret = "glm-secret-must-not-be-returned"
     private_storage_path = str(BOOTSTRAP_ROOT / "qdrant_storage_v03")
     application = _app(
@@ -259,7 +288,7 @@ async def test_research_console_separates_configuration_from_audited_state() -> 
     assert body["current_run"] == {
         "run_id": "bootstrap-002",
         "mode": "bootstrap",
-        "generated_at": "2026-08-05T06:08:53.424056+00:00",
+        "generated_at": "2026-01-01T00:00:00Z",
         "collection": "magicforge_bootstrap_v03",
         "status": "receipt_verified",
     }
@@ -281,15 +310,15 @@ async def test_research_console_separates_configuration_from_audited_state() -> 
     assert body["memory_vault"]["manifest"]["status"] == "manifest_verified"
     assert body["memory_vault"]["receipt"]["status"] == "receipt_verified"
     assert body["memory_vault"]["points"] == {
-        "manifest": 797,
-        "receipt": 797,
-        "smoke_observed": 797,
+        "manifest": synthetic_bootstrap_corpus.point_count,
+        "receipt": synthetic_bootstrap_corpus.point_count,
+        "smoke_observed": synthetic_bootstrap_corpus.point_count,
     }
     assert body["memory_vault"]["retrieval_smoke"] == {
         "status": "report_verified",
-        "tested_at": "2026-08-05T06:09:19.831063+00:00",
-        "query_count": 7,
-        "collection_count": 797,
+        "tested_at": "2026-01-01T00:02:00Z",
+        "query_count": 2,
+        "collection_count": synthetic_bootstrap_corpus.point_count,
         "all_returned_hits_bootstrap_safe": True,
     }
     assert body["governance"]["checkpoint_status"] == "pending_human_review"
@@ -300,9 +329,9 @@ async def test_research_console_separates_configuration_from_audited_state() -> 
         "bootstrap-002",
     ]
     assert [item["qdrant_points"] for item in body["run_history"]] == [
-        287,
-        256,
-        797,
+        7,
+        11,
+        synthetic_bootstrap_corpus.point_count,
     ]
     assert [item["metric_basis"] for item in body["run_history"]] == [
         "reported_generated_outputs",
@@ -313,7 +342,7 @@ async def test_research_console_separates_configuration_from_audited_state() -> 
         "id": "memory_projection",
         "label": "Memory projection",
         "status": "receipt_verified",
-        "metrics": {"qdrant_points": 797},
+        "metrics": {"qdrant_points": synthetic_bootstrap_corpus.point_count},
     }
 
     serialized = response.text

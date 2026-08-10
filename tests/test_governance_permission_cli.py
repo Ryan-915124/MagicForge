@@ -254,6 +254,7 @@ def test_default_is_offline_dry_run_without_prompt_or_http(
 def test_official_batch_dry_run_locks_all_29_sources_and_is_offline(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    synthetic_official_cli_bundle,
 ) -> None:
     monkeypatch.setattr(
         cli.getpass,

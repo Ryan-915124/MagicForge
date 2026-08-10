@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import httpx
@@ -27,6 +28,18 @@ from persistence import (
 
 ADMIN_PASSWORD = "correct horse battery staple"
 READER_PASSWORD = "another carefully chosen passphrase"
+
+
+class _SteppingClock:
+    """A shared clock that cannot move backwards between security services."""
+
+    def __init__(self) -> None:
+        self._value = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        current = self._value
+        self._value += timedelta(milliseconds=1)
+        return current
 
 
 class _SQLiteAuthenticationManager:
@@ -79,7 +92,12 @@ def _authentication_app(tmp_path):
 
 
 def _create_initial_admin(application) -> None:
-    application.state.security_services.admin.bootstrap_initial_admin(
+    services = application.state.security_services
+    clock = _SteppingClock()
+    services.auth._clock = clock
+    services.admin._clock = clock
+    services.audit._clock = clock
+    services.admin.bootstrap_initial_admin(
         username="ArchiveAdmin",
         email="admin@example.test",
         password=ADMIN_PASSWORD,
@@ -226,6 +244,7 @@ async def test_admin_user_role_and_session_routes_enforce_live_rbac(tmp_path) ->
             admin_login = await _bearer_login(
                 client, "ArchiveAdmin", ADMIN_PASSWORD
             )
+            assert admin_login.status_code == 200, admin_login.text
             admin_token = admin_login.json()["access_token"]
             admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -258,6 +277,7 @@ async def test_admin_user_role_and_session_routes_enforce_live_rbac(tmp_path) ->
             reader_login = await _bearer_login(
                 client, "ReaderOne", READER_PASSWORD
             )
+            assert reader_login.status_code == 200, reader_login.text
             reader_token = reader_login.json()["access_token"]
             reader_session_id = reader_login.json()["actor"]["session_id"]
             reader_headers = {"Authorization": f"Bearer {reader_token}"}

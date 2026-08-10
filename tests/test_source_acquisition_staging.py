@@ -26,6 +26,19 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_RUN = REPOSITORY_ROOT / "research/runs/magicforge-corpus-run-001"
 
 
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_source_run(synthetic_acquisition_locks):
+    global SOURCE_RUN, EXPECTED_CANDIDATE_IDS
+
+    previous = (SOURCE_RUN, EXPECTED_CANDIDATE_IDS)
+    SOURCE_RUN = synthetic_acquisition_locks.root
+    EXPECTED_CANDIDATE_IDS = synthetic_acquisition_locks.candidate_ids
+    try:
+        yield
+    finally:
+        SOURCE_RUN, EXPECTED_CANDIDATE_IDS = previous
+
+
 def _copy_source_run(tmp_path: Path) -> Path:
     destination = tmp_path / "magicforge-corpus-run-001"
     shutil.copytree(SOURCE_RUN, destination)

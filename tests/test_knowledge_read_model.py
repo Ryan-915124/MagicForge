@@ -24,6 +24,18 @@ RUN_PATH = Path("research/runs/bootstrap-002")
 BOOTSTRAP_AUTHORIZATION = bootstrap_anonymous_retrieval_authorization()
 
 
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_corpus(synthetic_bootstrap_corpus):
+    global RUN_PATH
+
+    previous = RUN_PATH
+    RUN_PATH = synthetic_bootstrap_corpus.root
+    try:
+        yield
+    finally:
+        RUN_PATH = previous
+
+
 def _active_corpus():
     return load_active_corpus(
         Settings(
@@ -43,7 +55,9 @@ def _active_corpus():
     )
 
 
-def test_read_model_matches_projected_manifest_counts() -> None:
+def test_read_model_matches_projected_manifest_counts(
+    synthetic_bootstrap_corpus,
+) -> None:
     active_corpus = _active_corpus()
     model = ProjectedKnowledgeReadModel(active_corpus)
     model.validate()
@@ -52,43 +66,46 @@ def test_read_model_matches_projected_manifest_counts() -> None:
     assert model.summary.collection == "magicforge_bootstrap_v03"
     assert model.summary.run_id == active_corpus.corpus_id
     assert model.summary.manifest_id == active_corpus.manifest_id
-    assert model.summary.sources == 219
-    assert model.summary.evidence_cards == 632
-    assert model.summary.knowledge_nodes == 158
-    assert model.summary.relationships == 7
-    assert model.summary.renderable_relationships == 4
-    assert model.summary.qdrant_points == 797
+    assert model.summary.sources == synthetic_bootstrap_corpus.source_count
+    assert model.summary.evidence_cards == synthetic_bootstrap_corpus.evidence_card_count
+    assert model.summary.knowledge_nodes == synthetic_bootstrap_corpus.knowledge_node_count
+    assert model.summary.relationships == synthetic_bootstrap_corpus.relationship_count
+    assert (
+        model.summary.renderable_relationships
+        == synthetic_bootstrap_corpus.renderable_relationship_count
+    )
+    assert model.summary.qdrant_points == synthetic_bootstrap_corpus.point_count
     assert model.summary.human_verified is False
 
-    assert model.statistics.sources_with_projected_knowledge == 185
-    assert model.statistics.source_categories == {
-        "academic": 88,
-        "practitioner": 131,
-    }
-    assert model.statistics.artifact_types == {
-        "evidence_card": 632,
-        "knowledge_node": 158,
-        "relationship": 7,
-    }
-    assert model.statistics.domain_memberships == {
-        "card": 62,
-        "close-up": 102,
-        "mentalism": 74,
-        "stage": 127,
-        "theory": 558,
-    }
-    assert model.statistics.knowledge_origins == {
-        "expert_practice": 444,
-        "personal_interpretation": 56,
-        "scientific_evidence": 297,
-    }
+    assert (
+        model.statistics.sources_with_projected_knowledge
+        == synthetic_bootstrap_corpus.source_count
+    )
+    assert model.statistics.source_categories == synthetic_bootstrap_corpus.source_categories
+    assert model.statistics.artifact_types == synthetic_bootstrap_corpus.artifact_types
+    assert (
+        model.statistics.domain_memberships
+        == synthetic_bootstrap_corpus.domain_memberships
+    )
+    assert (
+        model.statistics.knowledge_origins
+        == synthetic_bootstrap_corpus.knowledge_origins
+    )
     assert model.statistics.human_verified_points == 0
-    assert model.statistics.contradiction_checks_pending == 632
-    assert model.statistics.pending_human_review_sources == 219
+    assert (
+        model.statistics.contradiction_checks_pending
+        == synthetic_bootstrap_corpus.evidence_card_count
+    )
+    assert (
+        model.statistics.pending_human_review_sources
+        == synthetic_bootstrap_corpus.source_count
+    )
     assert model.statistics.production_collection_touched is False
 
 
-def test_default_graph_returns_only_real_projected_entities_and_edges() -> None:
+def test_default_graph_returns_only_real_projected_entities_and_edges(
+    synthetic_bootstrap_corpus,
+) -> None:
     model = ProjectedKnowledgeReadModel(_active_corpus())
     page = model.search(
         "",
@@ -97,8 +114,8 @@ def test_default_graph_returns_only_real_projected_entities_and_edges() -> None:
         authorization=BOOTSTRAP_AUTHORIZATION,
     )
 
-    assert len(page.nodes) == 60
-    assert len(page.relationships) == 4
+    assert len(page.nodes) == synthetic_bootstrap_corpus.knowledge_node_count
+    assert len(page.relationships) == synthetic_bootstrap_corpus.relationship_count
     entity_ids = {item.entity.id for item in page.nodes}
     assert all(item.source_id in entity_ids for item in page.relationships)
     assert all(item.target_id in entity_ids for item in page.relationships)

@@ -24,26 +24,18 @@ from app.runtime_corpus import ActiveCorpus, load_active_corpus
 from knowledge.governance import MagicForgeMode
 from knowledge.bootstrap import BootstrapQdrantProjection
 from pydantic import TypeAdapter
+from tests.support.synthetic_bootstrap import (
+    SyntheticBootstrapCorpus,
+    bootstrap_settings as make_bootstrap_settings,
+)
 
 
-def _bootstrap_settings(*, glm_api_key: str = "test-key") -> Settings:
-    root = PROJECT_ROOT / "research/runs/bootstrap-002"
-    return Settings(
-        glm_api_key=glm_api_key,
-        magicforge_mode=MagicForgeMode.BOOTSTRAP,
-        active_corpus_root=str(root),
-        active_corpus_id="bootstrap-002",
-        active_corpus_manifest_path=str(
-            root / "qdrant_manifest/bootstrap-manifest-v03.json"
-        ),
-        active_corpus_receipt_path=str(
-            root / "qdrant_manifest/ingestion-receipt-v03.json"
-        ),
-        active_corpus_manifest_schema="bootstrap-manifest-0.2",
-        active_qdrant_storage_kind="local",
-        active_qdrant_local_path=str(root / "qdrant_storage_v03"),
-        embedding_dimension=384,
-    )
+def _bootstrap_settings(
+    fixture: SyntheticBootstrapCorpus,
+    *,
+    glm_api_key: str = "test-key",
+) -> Settings:
+    return make_bootstrap_settings(fixture, glm_api_key=glm_api_key)
 
 
 class _FakeRetriever:
@@ -98,7 +90,7 @@ class _FakeEmbedding:
 
 
 class _FakeQdrantClient:
-    def __init__(self, *, collection_exists: bool, point_count: int = 797) -> None:
+    def __init__(self, *, collection_exists: bool, point_count: int) -> None:
         self._collection_exists = collection_exists
         self._point_count = point_count
         self.collection_exists_calls: list[str] = []
@@ -133,8 +125,8 @@ class _FakeQdrantClient:
 
 
 @pytest.fixture(scope="module")
-def bootstrap_settings() -> Settings:
-    return _bootstrap_settings()
+def bootstrap_settings(synthetic_bootstrap_corpus) -> Settings:
+    return _bootstrap_settings(synthetic_bootstrap_corpus)
 
 
 @pytest.fixture(scope="module")
@@ -164,8 +156,11 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-def test_import_and_create_app_do_not_open_qdrant() -> None:
+def test_import_and_create_app_do_not_open_qdrant(
+    synthetic_bootstrap_corpus,
+) -> None:
     root = Path(PROJECT_ROOT)
+    corpus_root = synthetic_bootstrap_corpus.root
     script = f"""
 import qdrant_client
 
@@ -178,7 +173,7 @@ import app.main
 from app.config import Settings
 from knowledge.governance import MagicForgeMode
 
-root = {str(root / 'research/runs/bootstrap-002')!r}
+root = {str(corpus_root)!r}
 settings = Settings(
     magicforge_mode=MagicForgeMode.BOOTSTRAP,
     active_corpus_root=root,
@@ -243,11 +238,12 @@ async def test_lifespan_starts_and_closes_injected_runtime_exactly_once(
 
 @pytest.mark.anyio
 async def test_failed_initialization_keeps_live_endpoint_and_returns_safe_503(
+    bootstrap_settings: Settings,
     active_corpus: ActiveCorpus,
 ) -> None:
     secret = "glm-secret-that-must-not-leak"
     private_path = str(active_corpus.local_storage_path)
-    settings = _bootstrap_settings(glm_api_key=secret)
+    settings = replace(bootstrap_settings, glm_api_key=secret)
 
     def failing_builder(_settings: Settings) -> RuntimeServices:
         raise RuntimeError(f"dependency failure: {secret} at {private_path}")
@@ -361,8 +357,12 @@ def test_runtime_services_reject_retriever_manifest_identity_mismatch(
 
 def test_runtime_factory_shares_active_corpus_across_real_adapters(
     bootstrap_settings: Settings,
+    synthetic_bootstrap_corpus,
 ) -> None:
-    client = _FakeQdrantClient(collection_exists=True)
+    client = _FakeQdrantClient(
+        collection_exists=True,
+        point_count=synthetic_bootstrap_corpus.point_count,
+    )
     client.records = _authoritative_bootstrap_records(bootstrap_settings)
     factory_corpora: list[ActiveCorpus] = []
 
@@ -395,7 +395,7 @@ def test_runtime_factory_shares_active_corpus_across_real_adapters(
 async def test_missing_qdrant_collection_fails_closed_without_creating_it(
     bootstrap_settings: Settings,
 ) -> None:
-    client = _FakeQdrantClient(collection_exists=False)
+    client = _FakeQdrantClient(collection_exists=False, point_count=0)
     glm_factory_calls = 0
 
     def glm_factory(_settings: Settings):

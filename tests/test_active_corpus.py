@@ -21,7 +21,23 @@ MANIFEST_HASH = "84b8bb01ba1ef7159268b1178059c415670af23e6c7b27d9dd34bba1d1faab9
 RECEIPT_ID = "a720b4db-9a2d-564e-bb8f-fd9f9ea4f37e"
 
 
-def _bootstrap_settings(root: Path = RUN_ROOT, **changes) -> Settings:
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_corpus(synthetic_bootstrap_corpus):
+    global RUN_ROOT, MANIFEST_ID, MANIFEST_HASH, RECEIPT_ID
+
+    previous = (RUN_ROOT, MANIFEST_ID, MANIFEST_HASH, RECEIPT_ID)
+    RUN_ROOT = synthetic_bootstrap_corpus.root
+    MANIFEST_ID = synthetic_bootstrap_corpus.manifest_id
+    MANIFEST_HASH = synthetic_bootstrap_corpus.manifest_hash
+    RECEIPT_ID = synthetic_bootstrap_corpus.receipt_id
+    try:
+        yield
+    finally:
+        RUN_ROOT, MANIFEST_ID, MANIFEST_HASH, RECEIPT_ID = previous
+
+
+def _bootstrap_settings(root: Path | None = None, **changes) -> Settings:
+    root = RUN_ROOT if root is None else root
     settings = Settings(
         magicforge_mode=MagicForgeMode.BOOTSTRAP,
         active_corpus_root=str(root),
@@ -83,9 +99,9 @@ def test_authoritative_v03_resolves_exact_immutable_identity() -> None:
     assert corpus.manifest_hash == MANIFEST_HASH
     assert corpus.receipt_id == RECEIPT_ID
     assert corpus.collection_name == "magicforge_bootstrap_v03"
-    assert corpus.expected_point_count == 797
-    assert len(corpus.expected_point_ids) == 797
-    assert len(set(corpus.expected_point_ids)) == 797
+    assert corpus.expected_point_count > 0
+    assert len(corpus.expected_point_ids) == corpus.expected_point_count
+    assert len(set(corpus.expected_point_ids)) == corpus.expected_point_count
     assert corpus.storage_kind == "local"
     assert corpus.local_storage_path == RUN_ROOT / "qdrant_storage_v03"
     assert corpus.server_url is None

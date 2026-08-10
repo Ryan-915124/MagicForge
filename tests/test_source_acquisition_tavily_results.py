@@ -27,6 +27,19 @@ SOURCE_RUN = REPOSITORY_ROOT / "research/runs/magicforge-corpus-run-001"
 UNRESOLVED_ID = "282bfa90-a30b-5604-9dd5-a046cee0b2fe"
 
 
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_source_run(synthetic_acquisition_locks):
+    global SOURCE_RUN, UNRESOLVED_ID
+
+    previous = (SOURCE_RUN, UNRESOLVED_ID)
+    SOURCE_RUN = synthetic_acquisition_locks.root
+    UNRESOLVED_ID = synthetic_acquisition_locks.unresolved_candidate_id
+    try:
+        yield
+    finally:
+        SOURCE_RUN, UNRESOLVED_ID = previous
+
+
 def _selected_locator(entry: dict) -> dict:
     kind = (
         "publisher_or_repository_html"

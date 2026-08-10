@@ -17,6 +17,20 @@ from knowledge.governance import MagicForgeMode
 
 
 RUN_PATH = Path("research/runs/bootstrap-002")
+CONSOLE_PROJECT_ROOT = PROJECT_ROOT
+
+
+@pytest.fixture(autouse=True)
+def _use_public_synthetic_corpus(synthetic_bootstrap_corpus):
+    global RUN_PATH, CONSOLE_PROJECT_ROOT
+
+    previous = (RUN_PATH, CONSOLE_PROJECT_ROOT)
+    RUN_PATH = synthetic_bootstrap_corpus.root
+    CONSOLE_PROJECT_ROOT = synthetic_bootstrap_corpus.project_root
+    try:
+        yield
+    finally:
+        RUN_PATH, CONSOLE_PROJECT_ROOT = previous
 
 
 def _active_corpus():
@@ -40,7 +54,9 @@ def _active_corpus():
 
 def test_console_uses_active_corpus_identity_without_probing() -> None:
     active_corpus = _active_corpus()
-    snapshot = ResearchConsoleReadModel(active_corpus, PROJECT_ROOT).snapshot(
+    snapshot = ResearchConsoleReadModel(
+        active_corpus, CONSOLE_PROJECT_ROOT
+    ).snapshot(
         Settings(
             glm_api_key="configured-key",
             glm_model="glm-test",
@@ -66,7 +82,7 @@ def test_console_uses_active_corpus_identity_without_probing() -> None:
 
 
 def test_console_rejects_receipt_manifest_mismatch() -> None:
-    model = ResearchConsoleReadModel(_active_corpus(), PROJECT_ROOT)
+    model = ResearchConsoleReadModel(_active_corpus(), CONSOLE_PROJECT_ROOT)
     reports = deepcopy(model._load())
     receipt = reports["bootstrap_002_receipt"]
     assert isinstance(receipt, dict)
@@ -101,7 +117,7 @@ def test_console_rejects_a_production_corpus() -> None:
     )
 
     with pytest.raises(ResearchConsoleReadModelError, match="requires a Bootstrap"):
-        ResearchConsoleReadModel(production, PROJECT_ROOT)
+        ResearchConsoleReadModel(production, CONSOLE_PROJECT_ROOT)
 
 
 def test_console_rejects_descriptor_identity_drift() -> None:
@@ -109,7 +125,7 @@ def test_console_rejects_descriptor_identity_drift() -> None:
         _active_corpus(),
         collection_name="magicforge_bootstrap_wrong",
     )
-    model = ResearchConsoleReadModel(mismatched, PROJECT_ROOT)
+    model = ResearchConsoleReadModel(mismatched, CONSOLE_PROJECT_ROOT)
 
     with pytest.raises(
         ResearchConsoleReadModelError,

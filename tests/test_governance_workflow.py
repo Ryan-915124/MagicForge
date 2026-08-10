@@ -667,7 +667,7 @@ def test_permission_requests_are_append_only_idempotent_and_non_projecting(
         source.id,
         version.id,
         command,
-        idempotency_key="permission-amendment-v2",
+        idempotency_key="test-key",
     )
     assert amended.sequence == 2
     assert amended.supersedes_request_id == initial_request_id
@@ -676,7 +676,7 @@ def test_permission_requests_are_append_only_idempotent_and_non_projecting(
         source.id,
         version.id,
         command,
-        idempotency_key="permission-amendment-v2",
+        idempotency_key="test-key",
     ) == amended
 
     same_material = _permission_request_command(
@@ -703,7 +703,7 @@ def test_permission_requests_are_append_only_idempotent_and_non_projecting(
             source.id,
             version.id,
             changed,
-            idempotency_key="permission-amendment-v2",
+            idempotency_key="test-key",
         )
     assert idempotency_conflict.value.code == "idempotency_conflict"
 
