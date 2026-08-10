@@ -19,10 +19,16 @@ COMPOSE = ROOT / "compose.yaml"
 DEMO_CORPUS = ROOT / "data/demo/corpus.json"
 
 
-def _run_cli(*arguments: str, docker_bin: str | None = None) -> subprocess.CompletedProcess[str]:
+def _run_cli(
+    *arguments: str,
+    docker_bin: str | None = None,
+    extra_environment: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     environment = dict(os.environ)
     if docker_bin is not None:
         environment["MAGICFORGE_DOCKER_BIN"] = docker_bin
+    if extra_environment is not None:
+        environment.update(extra_environment)
     return subprocess.run(
         ["bash", str(CLI), *arguments],
         cwd=ROOT,
@@ -33,9 +39,144 @@ def _run_cli(*arguments: str, docker_bin: str | None = None) -> subprocess.Compl
     )
 
 
+def _write_fake_docker(tmp_path: Path) -> Path:
+    docker = tmp_path / "docker"
+    docker.write_text(
+        """#!/usr/bin/env bash
+set -eu
+
+state_dir="${FAKE_DOCKER_STATE_DIR:?}"
+printf '%s\n' "$*" >> "${state_dir}/calls.log"
+
+case "${1:-}" in
+  info)
+    exit 0
+    ;;
+  inspect)
+    container="${@: -1}"
+    case "${container}" in
+      postgres-container|qdrant-container|api-container)
+        printf 'running|healthy|0\n'
+        ;;
+      web-container)
+        count_file="${state_dir}/web-inspections"
+        count=0
+        if [[ -f "${count_file}" ]]; then
+          count="$(cat "${count_file}")"
+        fi
+        count=$((count + 1))
+        printf '%s\n' "${count}" > "${count_file}"
+        if ((count == 1)); then
+          printf 'running|starting|0\n'
+        else
+          printf 'running|healthy|0\n'
+        fi
+        ;;
+      migrate-container)
+        printf 'exited|missing|0\n'
+        ;;
+      seed-container)
+        printf 'exited|missing|%s\n' "${FAKE_DOCKER_SEED_EXIT:-0}"
+        ;;
+      *)
+        exit 2
+        ;;
+    esac
+    exit 0
+    ;;
+  compose)
+    if [[ " $* " == *" version "* ]]; then
+      exit 0
+    fi
+    if [[ " $* " == *" ps --all --quiet "* ]]; then
+      service="${@: -1}"
+      printf '%s-container\n' "${service}"
+    fi
+    exit 0
+    ;;
+esac
+
+exit 2
+""",
+        encoding="utf-8",
+    )
+    docker.chmod(0o755)
+    return docker
+
+
 @pytest.mark.parametrize("profile", ["demo", "development", "production"])
 def test_static_delivery_check_passes(profile: str) -> None:
     compose_static_check.validate(profile)
+
+
+def test_static_delivery_uses_compose_json_without_pyyaml(monkeypatch) -> None:
+    model = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    commands: list[list[str]] = []
+
+    def no_pyyaml() -> object:
+        raise ModuleNotFoundError("No module named 'yaml'")
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, json.dumps(model), "")
+
+    monkeypatch.setattr(compose_static_check, "_load_with_pyyaml", no_pyyaml)
+    monkeypatch.setattr(compose_static_check.subprocess, "run", fake_run)
+
+    compose_static_check.validate("demo")
+
+    assert len(commands) == 1
+    command = commands[0]
+    assert command[:2] == ["docker", "compose"]
+    assert "--env-file" in command
+    assert command[command.index("--profile") + 1] == "*"
+    assert "--format" in command
+    assert command[command.index("--format") + 1] == "json"
+    assert "--no-interpolate" in command
+
+
+def test_static_delivery_compose_fallback_keeps_production_fail_closed(monkeypatch) -> None:
+    model = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    model["services"]["api-production"]["environment"][
+        "PRODUCTION_QDRANT_WRITES_ENABLED"
+    ] = "true"
+
+    def no_pyyaml() -> object:
+        raise ModuleNotFoundError("No module named 'yaml'")
+
+    monkeypatch.setattr(compose_static_check, "_load_with_pyyaml", no_pyyaml)
+    monkeypatch.setattr(
+        compose_static_check.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, json.dumps(model), ""
+        ),
+    )
+
+    with pytest.raises(
+        compose_static_check.ComposeCheckError,
+        match="enables persistent writes",
+    ):
+        compose_static_check.validate("demo")
+
+
+def test_static_delivery_rejects_compose_include_directive(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    compose = tmp_path / "compose.yaml"
+    compose.write_text(
+        "include:\n  - hidden-compose.yaml\n"
+        + COMPOSE.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(compose_static_check, "COMPOSE", compose)
+
+    with pytest.raises(
+        compose_static_check.ComposeCheckError,
+        match="forbidden include directive",
+    ):
+        compose_static_check.validate("demo")
 
 
 def test_compose_has_gated_services_and_no_private_mounts() -> None:
@@ -169,6 +310,100 @@ def test_cli_static_doctor_and_fail_closed_paths() -> None:
     assert "delete-demo-volumes" in unsafe_down.stderr
     assert unsafe_development_backup.returncode != 0
     assert "public Demo profile" in unsafe_development_backup.stderr
+
+
+def test_cli_up_waits_for_runtime_health_and_completed_jobs(tmp_path: Path) -> None:
+    docker = _write_fake_docker(tmp_path)
+    result = _run_cli(
+        "up",
+        "demo",
+        docker_bin=str(docker),
+        extra_environment={
+            "FAKE_DOCKER_STATE_DIR": str(tmp_path),
+            "MAGICFORGE_STARTUP_TIMEOUT_SECONDS": "5",
+            "MAGICFORGE_STARTUP_POLL_SECONDS": "0.01",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "MagicForge demo started" in result.stdout
+    assert (tmp_path / "web-inspections").read_text(encoding="utf-8").strip() == "2"
+    calls = (tmp_path / "calls.log").read_text(encoding="utf-8")
+    assert "inspect --format" in calls
+    assert "seed-container" in calls
+    assert "migrate-container" in calls
+
+
+def test_cli_up_fails_when_seed_job_fails(tmp_path: Path) -> None:
+    docker = _write_fake_docker(tmp_path)
+    result = _run_cli(
+        "up",
+        "demo",
+        docker_bin=str(docker),
+        extra_environment={
+            "FAKE_DOCKER_STATE_DIR": str(tmp_path),
+            "FAKE_DOCKER_SEED_EXIT": "17",
+            "MAGICFORGE_STARTUP_TIMEOUT_SECONDS": "5",
+            "MAGICFORGE_STARTUP_POLL_SECONDS": "0.01",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "seed failed during startup (exit=17)" in result.stderr
+    assert "MagicForge demo started" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "message"),
+    [
+        (
+            "MAGICFORGE_STARTUP_TIMEOUT_SECONDS",
+            "not-a-timeout",
+            "must be an integer from 1 to 900",
+        ),
+        (
+            "MAGICFORGE_STARTUP_TIMEOUT_SECONDS",
+            "901",
+            "must be an integer from 1 to 900",
+        ),
+        (
+            "MAGICFORGE_STARTUP_POLL_SECONDS",
+            "later",
+            "must be greater than 0 and at most 30",
+        ),
+        (
+            "MAGICFORGE_STARTUP_POLL_SECONDS",
+            "0",
+            "must be greater than 0 and at most 30",
+        ),
+        (
+            "MAGICFORGE_STARTUP_POLL_SECONDS",
+            "30.1",
+            "must be greater than 0 and at most 30",
+        ),
+    ],
+)
+def test_cli_up_rejects_invalid_wait_configuration_before_docker_side_effects(
+    tmp_path: Path,
+    variable: str,
+    value: str,
+    message: str,
+) -> None:
+    docker = _write_fake_docker(tmp_path)
+    result = _run_cli(
+        "up",
+        "demo",
+        docker_bin=str(docker),
+        extra_environment={
+            "FAKE_DOCKER_STATE_DIR": str(tmp_path),
+            variable: value,
+        },
+    )
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    calls_path = tmp_path / "calls.log"
+    assert not calls_path.exists() or " up " not in calls_path.read_text(encoding="utf-8")
 
 
 def test_cli_positional_audit_target_is_treated_as_artifact(tmp_path: Path) -> None:

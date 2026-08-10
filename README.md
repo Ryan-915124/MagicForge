@@ -8,6 +8,7 @@ Prerequisites:
 
 - Docker Engine or Docker Desktop with Docker Compose v2
 - Git
+- Python 3.12.3 for the launcher safety and `doctor` checks; the Demo does not require third-party host packages
 - approximately 4 GB of free memory and ports 3000, 8000, 5432, and 6333 available on loopback
 
 On Windows with WSL, enable Docker Desktop integration for the distribution before continuing.

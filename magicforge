@@ -98,6 +98,96 @@ assert_healthy_service() {
   [[ "${health}" == "healthy" ]] || die "${service} is not healthy (${health})"
 }
 
+startup_timeout_seconds() {
+  local timeout="${MAGICFORGE_STARTUP_TIMEOUT_SECONDS:-300}"
+  [[ "${timeout}" =~ ^[1-9][0-9]*$ ]] \
+    || die "MAGICFORGE_STARTUP_TIMEOUT_SECONDS must be an integer from 1 to 900"
+  ((timeout <= 900)) \
+    || die "MAGICFORGE_STARTUP_TIMEOUT_SECONDS must be an integer from 1 to 900"
+  printf '%s\n' "${timeout}"
+}
+
+startup_poll_seconds() {
+  local interval="${MAGICFORGE_STARTUP_POLL_SECONDS:-2}"
+  [[ "${interval}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]] \
+    || die "MAGICFORGE_STARTUP_POLL_SECONDS must be greater than 0 and at most 30"
+  [[ ! "${interval}" =~ ^0*([.]0*)?$ ]] \
+    || die "MAGICFORGE_STARTUP_POLL_SECONDS must be greater than 0 and at most 30"
+  local whole="${interval%%.*}" fraction=""
+  [[ "${interval}" == *.* ]] && fraction="${interval#*.}"
+  whole="${whole:-0}"
+  whole=$((10#${whole}))
+  if ((whole > 30)) || { ((whole == 30)) && [[ "${fraction}" =~ [1-9] ]]; }; then
+    die "MAGICFORGE_STARTUP_POLL_SECONDS must be greater than 0 and at most 30"
+  fi
+  printf '%s\n' "${interval}"
+}
+
+profile_jobs() {
+  printf '%s\n' migrate
+  if [[ "$1" == "demo" ]]; then
+    printf '%s\n' seed
+  fi
+}
+
+wait_for_profile_ready() {
+  local profile="$1" timeout interval deadline
+  timeout="$(startup_timeout_seconds)"
+  interval="$(startup_poll_seconds)"
+  deadline=$((SECONDS + timeout))
+
+  while true; do
+    local pending=0 service container state status health exit_code
+    while IFS= read -r service; do
+      container="$(compose --profile "${profile}" ps --all --quiet "${service}")"
+      if [[ -z "${container}" ]]; then
+        pending=1
+        continue
+      fi
+      state="$("${DOCKER_BIN}" inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.State.ExitCode}}' "${container}")" \
+        || die "could not inspect ${service} during startup"
+      IFS='|' read -r status health exit_code <<<"${state}"
+      if [[ "${status}" == "exited" || "${status}" == "dead" ]]; then
+        die "${service} stopped before becoming healthy (status=${status}, exit=${exit_code})"
+      fi
+      if [[ "${health}" == "unhealthy" ]]; then
+        die "${service} failed its startup healthcheck"
+      fi
+      if [[ "${status}" != "running" || "${health}" != "healthy" ]]; then
+        pending=1
+      fi
+    done < <(runtime_services "${profile}")
+
+    while IFS= read -r service; do
+      container="$(compose --profile "${profile}" ps --all --quiet "${service}")"
+      if [[ -z "${container}" ]]; then
+        pending=1
+        continue
+      fi
+      state="$("${DOCKER_BIN}" inspect --format '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.State.ExitCode}}' "${container}")" \
+        || die "could not inspect ${service} during startup"
+      IFS='|' read -r status health exit_code <<<"${state}"
+      if [[ "${status}" == "exited" ]]; then
+        [[ "${exit_code}" == "0" ]] \
+          || die "${service} failed during startup (exit=${exit_code})"
+      elif [[ "${status}" == "dead" ]]; then
+        die "${service} failed during startup (status=dead)"
+      else
+        pending=1
+      fi
+    done < <(profile_jobs "${profile}")
+
+    if ((pending == 0)); then
+      return 0
+    fi
+    if ((SECONDS >= deadline)); then
+      compose --profile "${profile}" ps --all >&2 || true
+      die "${profile} startup timed out after ${timeout}s while waiting for healthy services"
+    fi
+    sleep "${interval}"
+  done
+}
+
 assert_safe_mounts() {
   local profile="$1" container source
   while IFS= read -r container; do
@@ -135,11 +225,14 @@ command_up() {
   local profile="$1"
   validate_profile "${profile}"
   static_doctor "${profile}"
+  startup_timeout_seconds >/dev/null
+  startup_poll_seconds >/dev/null
   require_docker
   export MAGICFORGE_TARGET_PROFILE="${profile}"
   mapfile -t services < <(profile_services "${profile}")
   compose --profile "${profile}" config --quiet
   compose --profile "${profile}" up --detach --build "${services[@]}"
+  wait_for_profile_ready "${profile}"
   printf 'MagicForge %s started at http://127.0.0.1:%s. Run ./magicforge doctor %s for readiness.\n' \
     "${profile}" "${MAGICFORGE_WEB_PORT:-3000}" "${profile}"
 }

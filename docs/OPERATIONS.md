@@ -9,7 +9,7 @@
 
 Doctor is read-only and returns nonzero when a required check fails. It verifies Docker/Compose availability, the requested profile, service health, PostgreSQL, Alembic state, Qdrant, Demo collection identity and point count, API liveness/readiness, frontend HTTP, read-only Corpus identity, and absence of private host mounts.
 
-Use `./magicforge doctor demo --static` when Docker is unavailable. Static Doctor validates configuration and private-data boundaries but cannot claim runtime health.
+Use `./magicforge doctor demo --static` when the Docker daemon is unavailable. Static Doctor uses either the project virtual environment or the Docker Compose CLI to validate configuration and private-data boundaries, but it cannot claim runtime health.
 
 ## Start, stop, and restart
 

@@ -5,7 +5,8 @@ This document covers the public Self-hosted Alpha. The supported public quick-st
 ## Supported toolchain
 
 - Docker Engine with Docker Compose v2
-- For source development: Python 3.12.3 and Node.js 22.22.1
+- Python 3.12.3 for the launcher safety and Doctor checks; the Demo needs no third-party host packages
+- For source development: Node.js 22.22.1
 - Loopback ports 3000, 8000, 5432, and 6333 must be available unless overridden
 
 ## Demo

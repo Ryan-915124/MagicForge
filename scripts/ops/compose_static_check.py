@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
 import sys
-
-import yaml
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,13 +23,67 @@ class ComposeCheckError(RuntimeError):
     pass
 
 
+def _load_with_pyyaml() -> object:
+    import yaml
+
+    return yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+
+
+def _load_with_compose_cli() -> object:
+    docker_bin = os.environ.get("MAGICFORGE_DOCKER_BIN", "docker")
+    with tempfile.TemporaryDirectory(prefix="magicforge-compose-check-") as directory:
+        empty_environment = Path(directory) / "empty.env"
+        empty_environment.write_text("", encoding="utf-8")
+        command = [
+            docker_bin,
+            "compose",
+            "--env-file",
+            str(empty_environment),
+            "--file",
+            str(COMPOSE),
+            "--profile",
+            "*",
+            "config",
+            "--format",
+            "json",
+            "--no-interpolate",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ComposeCheckError(
+                "compose.yaml validation requires Docker Compose when PyYAML is unavailable"
+            ) from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        suffix = f": {detail}" if detail else ""
+        raise ComposeCheckError(f"Docker Compose could not render compose.yaml{suffix}")
+    try:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ComposeCheckError("Docker Compose returned invalid JSON") from exc
+
+
+def _load_model() -> object:
+    try:
+        return _load_with_pyyaml()
+    except ModuleNotFoundError:
+        return _load_with_compose_cli()
+    except Exception as exc:
+        raise ComposeCheckError("compose.yaml is not valid YAML") from exc
+
+
 def validate(profile: str) -> None:
     if profile not in ALLOWED_PROFILES:
         raise ComposeCheckError("profile must be demo or development")
-    try:
-        model = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ComposeCheckError("compose.yaml is not valid YAML") from exc
+    model = _load_model()
     services = model.get("services") if isinstance(model, dict) else None
     if not isinstance(services, dict):
         raise ComposeCheckError("compose.yaml has no services mapping")
@@ -141,7 +197,10 @@ def validate(profile: str) -> None:
     ):
         raise ComposeCheckError("web services do not wait for healthy APIs")
 
-    serialized = COMPOSE.read_text(encoding="utf-8").casefold()
+    raw_compose = COMPOSE.read_text(encoding="utf-8")
+    serialized = raw_compose.casefold()
+    if re.search(r"(?mi)^[ \t]*include[ \t]*:", raw_compose):
+        raise ComposeCheckError("compose.yaml uses a forbidden include directive")
     forbidden_content = (
         "research/runs",
         "magicforge_bootstrap_",
