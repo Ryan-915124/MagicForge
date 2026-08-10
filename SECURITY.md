@@ -2,13 +2,19 @@
 
 ## Supported versions
 
-MagicForge is currently a self-hosted Alpha. Until the first tagged release, security fixes apply to the current `main` branch only. No compatibility or response-time guarantee is offered yet.
+MagicForge is currently a self-hosted Alpha. Security fixes target the current
+`main` branch and the latest GitHub prerelease; older prereleases are
+unsupported once superseded. No compatibility or response-time guarantee is
+offered yet.
 
 ## Reporting a vulnerability
 
 Do not open a public issue for authentication, authorization, CSRF, secret exposure, private-corpus disclosure, Qdrant write-boundary, or supply-chain vulnerabilities.
 
-After the official GitHub repository exists, maintainers must enable GitHub Private Vulnerability Reporting. Submit reports through the repository's **Security → Report a vulnerability** workflow. A public security contact address has not been declared; this document intentionally does not invent one.
+GitHub Private Vulnerability Reporting is enabled. Submit reports through the
+repository's **Security → Report a vulnerability** workflow. A public security
+contact address has not been declared; this document intentionally does not
+invent one.
 
 Include a minimal reproduction that does not contain real credentials, private source text, copyrighted corpus material, or operational magic secrets.
 

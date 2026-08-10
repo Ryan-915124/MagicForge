@@ -57,7 +57,7 @@ x-api-base: &api-base
     context: .
     dockerfile: Dockerfile.backend
     target: runtime
-  image: magicforge-api:0.3.0
+  image: magicforge-api:0.1.0-alpha.2
   restart: unless-stopped
   environment: *demo-environment
   depends_on:
@@ -95,7 +95,7 @@ x-web-base: &web-base
     context: .
     dockerfile: frontend/Dockerfile
     target: runtime
-  image: magicforge-web:0.1.0
+  image: magicforge-web:0.1.0-alpha.2
   restart: unless-stopped
   environment:
     MAGICFORGE_API_URL: http://api:8000
@@ -172,7 +172,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: runtime
-    image: magicforge-api:0.3.0
+    image: magicforge-api:0.1.0-alpha.2
     profiles: [demo, development]
     command: [alembic, upgrade, head]
     restart: no
@@ -196,7 +196,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: runtime
-    image: magicforge-api:0.3.0
+    image: magicforge-api:0.1.0-alpha.2
     profiles: [demo]
     command: [python, -m, scripts.ops.seed_demo_qdrant]
     restart: no
@@ -239,7 +239,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: development
-    image: magicforge-api-dev:0.3.0
+    image: magicforge-api-dev:0.1.0-alpha.2
     environment: *development-environment
     depends_on:
       postgres:
@@ -277,7 +277,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       target: development
-    image: magicforge-web-dev:0.1.0
+    image: magicforge-web-dev:0.1.0-alpha.2
     restart: unless-stopped
     environment:
       MAGICFORGE_API_URL: http://api-dev:8000
@@ -312,7 +312,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: ops
-    image: magicforge-ops:0.3.0
+    image: magicforge-ops:0.1.0-alpha.2
     profiles: [ops-backup]
     command: [backup]
     restart: no
@@ -348,7 +348,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: ops
-    image: magicforge-ops:0.3.0
+    image: magicforge-ops:0.1.0-alpha.2
     profiles: [ops-restore]
     command: [restore]
     restart: no
@@ -425,7 +425,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: runtime
-    image: magicforge-api:0.3.0
+    image: magicforge-api:0.1.0-alpha.2
     profiles: [production]
     command: [alembic, upgrade, head]
     restart: no
@@ -449,7 +449,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       target: runtime
-    image: magicforge-api:0.3.0
+    image: magicforge-api:0.1.0-alpha.2
     profiles: [production]
     restart: unless-stopped
     environment: *production-environment
@@ -490,7 +490,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       target: runtime
-    image: magicforge-web:0.1.0
+    image: magicforge-web:0.1.0-alpha.2
     profiles: [production]
     restart: unless-stopped
     environment:

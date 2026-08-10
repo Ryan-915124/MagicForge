@@ -1,6 +1,6 @@
 {
   "name": "magicforge-frontend",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.2",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {

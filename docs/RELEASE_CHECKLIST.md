@@ -1,13 +1,16 @@
 # MagicForge Public Alpha Release Checklist
 
-Do not publish from the working directory. Build the public artifact from the positive allowlist and validate the extracted artifact in a clean room.
+Use this checklist for every public prerelease or release. Do not publish from
+the working directory. Build the public artifact from the positive allowlist,
+validate the extracted artifact in a clean room, and record run-specific proof
+in CI and the GitHub release notes.
 
 ## Maintainer decisions
 
 - [x] Confirm project name, copyright holder (`Ryan915124`), and year (`2026`).
 - [x] Formally adopt Apache-2.0 for source code.
 - [x] Formally adopt CC BY 4.0 for the self-authored synthetic Demo data.
-- [ ] Rotate the previously configured GLM API key in the provider console.
+- [ ] Confirm that every credential exposed outside its intended secret store has been rotated in the provider console.
 - [x] Verify CODEOWNERS with the GitHub login `@Ryan-915124`.
 
 ## Source boundary
@@ -25,6 +28,7 @@ Do not publish from the working directory. Build the public artifact from the po
 - [ ] PostgreSQL migration integration runs without skip.
 - [ ] Real Qdrant integration runs without skip.
 - [ ] Frontend typecheck, lint, security tests, and Production build pass.
+- [ ] Public API, frontend package, Compose image, changelog, and tag versions agree.
 - [ ] Production fail-closed regression tests pass.
 - [ ] Docker backend and frontend images build.
 - [ ] Compose configuration validates.
@@ -44,12 +48,12 @@ Do not publish from the working directory. Build the public artifact from the po
 ## GitHub
 
 - [ ] Inspect `git status`, staged file list, cached diff, large files, and public audit.
-- [ ] Never use `git add .` for the first public commit.
-- [ ] Create the official repository without pushing private history.
-- [ ] Enable Private Vulnerability Reporting.
+- [ ] Stage only reviewed public files; never use `git add .` for a release commit.
+- [ ] Verify the release commit contains only reviewed public history.
+- [ ] Confirm Private Vulnerability Reporting remains enabled.
 - [ ] Enable secret scanning and push protection.
 - [ ] Confirm Actions permissions and branch protection.
-- [ ] Create the Alpha tag and release only after CI succeeds.
+- [ ] Create the prerelease tag and GitHub release only after CI succeeds.
 
 ## Explicitly deferred
 

@@ -17,6 +17,36 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "magicforge"
 COMPOSE = ROOT / "compose.yaml"
 DEMO_CORPUS = ROOT / "data/demo/corpus.json"
+PUBLIC_VERSION = "0.1.0-alpha.2"
+
+
+def test_public_release_version_metadata_agrees() -> None:
+    frontend_package = json.loads(
+        (ROOT / "frontend/package.json").read_text(encoding="utf-8")
+    )
+    frontend_lock = json.loads(
+        (ROOT / "frontend/package-lock.json").read_text(encoding="utf-8")
+    )
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    magicforge_images = {
+        str(service["image"])
+        for service in compose["services"].values()
+        if str(service.get("image", "")).startswith("magicforge-")
+    }
+
+    assert frontend_package["version"] == PUBLIC_VERSION
+    assert frontend_lock["version"] == PUBLIC_VERSION
+    assert frontend_lock["packages"][""]["version"] == PUBLIC_VERSION
+    assert magicforge_images
+    assert all(image.endswith(f":{PUBLIC_VERSION}") for image in magicforge_images)
+    assert (
+        f'version="{PUBLIC_VERSION}"'
+        in (ROOT / "app/main.py").read_text(encoding="utf-8")
+    )
+    assert (
+        f"## [{PUBLIC_VERSION}]"
+        in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    )
 
 
 def _run_cli(
