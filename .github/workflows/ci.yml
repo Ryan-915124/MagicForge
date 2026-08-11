@@ -34,7 +34,7 @@ jobs:
       TEST_DATABASE_URL: postgresql+psycopg://magicforge:magicforge-ci-only@127.0.0.1:5432/magicforge_ci
       TEST_QDRANT_URL: http://127.0.0.1:6333
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.3"
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22.22.1"
@@ -87,7 +87,7 @@ jobs:
   release-safety:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [backend, frontend, release-safety]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start clean synthetic Demo
         run: ./magicforge up demo
       - name: Run Demo Doctor after first start
@@ -144,7 +144,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [backend, frontend, release-safety]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.3"
