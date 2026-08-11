@@ -8,8 +8,12 @@ Prerequisites:
 
 - Docker Engine or Docker Desktop with Docker Compose v2
 - Git
-- Python 3.12.3 for the launcher safety and `doctor` checks; the Demo does not require third-party host packages
 - approximately 4 GB of free memory and ports 3000, 8000, 5432, and 6333 available on loopback
+
+The Demo launcher needs no host Python installation. When Python 3.12.3 is
+already available it runs the static safety check directly; otherwise it runs
+the same check in a locked-down, read-only Python container before starting the
+stack.
 
 On Windows with WSL, enable Docker Desktop integration for the distribution before continuing.
 
@@ -142,7 +146,7 @@ The command refuses to bootstrap over an existing user table and never accepts a
 
 ## Production
 
-Production is not a promoted Demo and does not have a one-command public deployment. Use `.env.production.example` as a checklist, supply secrets outside Git, and review the [operator runbook](docs/production-governance-operator-runbook.md).
+Production is not a promoted Demo and does not have a one-command public deployment. Use `.env.production.example` as a checklist, supply secrets outside Git, and review the tracked [deployment](docs/DEPLOYMENT.md) and [operations](docs/OPERATIONS.md) guides.
 
 Production requires at least:
 
@@ -201,6 +205,14 @@ python scripts/audit_public_release.py --artifact dist/magicforge-public.zip
 The builder creates a deterministic ZIP, `PUBLIC_RELEASE_MANIFEST.json`, and a `.sha256` sidecar. The audit rejects private paths, raw run trees, Qdrant/SQLite/snapshot/dump artifacts, source records that deny redistribution, symlinks, host-specific absolute paths, oversized files, and high-confidence secret patterns.
 
 Only `data/demo/` is public knowledge data. Every Demo record is project-authored and explicitly marked `synthetic=true`, `self_authored=true`, and `redistribution_allowed=true`. Acquired papers, books, web captures, transcripts, provider responses, extracted content, reviews, and private Qdrant state are not distributed and receive no rights from the code license.
+
+MagicForge does not provide an unsafe one-command importer for arbitrary private
+documents. Keep private inputs outside the checkout, confirm that you have the
+rights to process them, and move them through the governed Source, review,
+Evidence, mapping, Manifest, ingestion, and activation stages. The public Demo
+fixture is never a private-data staging area. See the [private corpus onboarding
+boundary](docs/DATA_BOUNDARY.md#onboarding-a-private-corpus) for the supported
+staged procedure and current Alpha limitations.
 
 See [Data Boundary](docs/DATA_BOUNDARY.md), [data licensing](DATA_LICENSE.md), and the [release checklist](docs/RELEASE_CHECKLIST.md).
 

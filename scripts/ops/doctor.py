@@ -81,7 +81,7 @@ def verify(*, api_url: str, qdrant_url: str, corpus_path: Path) -> dict[str, obj
         "corpus_id": corpus_id,
         "manifest_schema_version": DEMO_SCHEMA,
         "collection": collection,
-        "storage_kind": "local",
+        "storage_kind": "remote",
         "glm_configured": False,
     }
     for key, expected in expected_readiness.items():

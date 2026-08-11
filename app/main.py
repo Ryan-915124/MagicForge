@@ -513,7 +513,7 @@ def create_app(
 
     application = FastAPI(
         title="MagicForge",
-        version="0.1.0-alpha.2",
+        version="0.1.0-alpha.3",
         description="A RAG-powered AI assistant for magicians.",
         lifespan=lifespan,
     )

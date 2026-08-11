@@ -15,8 +15,8 @@ run outputs, and source records whose metadata denies redistribution.
 Build and verify an artifact with:
 
 ```bash
-python scripts/build_public_release.py
-python scripts/audit_public_release.py /path/to/extracted/magicforge-public
+python3 scripts/build_public_release.py --output dist/magicforge-public.zip
+python3 scripts/audit_public_release.py --artifact dist/magicforge-public.zip
 ```
 
 The build writes a deterministic ZIP archive and a SHA-256 sidecar. The archive
@@ -44,6 +44,53 @@ of those three affirmative declarations.
 These files may remain in a developer's working directory. They must not be
 deleted or moved merely to create a release. The allowlist builder ignores them
 and audits the isolated staging tree before producing an archive.
+
+## Onboarding a private corpus
+
+The public Alpha has no one-command arbitrary-document importer. That is a
+safety boundary: a document becoming readable is not Source approval, Claim
+approval, storage authorization, or redistribution permission.
+
+Use the following staged procedure:
+
+1. Keep the source body outside the repository, `data/demo/`, Docker build
+   context, and public release tree. Restrict access and retain an immutable
+   source checksum and locator.
+2. Confirm that you have the rights to access, process, embed, store, and expose
+   the material for the intended environment. Record source-specific limits;
+   a DOI, URL, purchase, or public web page does not by itself grant those
+   rights.
+3. Configure Development or Production only through an untracked environment
+   file or secret manager. Start from the applicable template without
+   overwriting an existing file:
+
+   ```bash
+   cp -n .env.development.example .env
+   chmod 600 .env
+   ```
+
+   Populate the corpus identity, Manifest/Receipt paths, remote Qdrant target,
+   and authentication settings locally. Never add the resulting `.env` or
+   private paths to the allowlist.
+4. Register the Source and exact version, obtain human Source approval, extract
+   bounded Claims, review Evidence Cards, and review entity and relationship
+   mappings. The `/governance` interface and the API routes documented in
+   [production-governance-backend.md](production-governance-backend.md#13-api-routes)
+   expose these stages; none of them implies the next approval.
+5. Build a Manifest only from currently eligible reviewed artifacts. A
+   different authorized operator should inspect its exact ID, hash, collection,
+   point count, projection schema, and sensitivity scope before authorizing
+   ingestion. Persistent Production writes remain disabled unless the exact
+   write-capability fields match that reviewed Manifest.
+6. Verify the ingestion Receipt, activate the matching Corpus separately, then
+   confirm API readiness and the product's displayed Corpus identity. Do not
+   bypass a not-ready state or substitute Demo/Bootstrap data.
+
+Compose Development intentionally does not import or bind-mount an arbitrary
+host directory. Operators must provision an already governed corpus into the
+configured private volume or use the direct-host Development topology described
+in [DEPLOYMENT.md](DEPLOYMENT.md#development). If those prerequisites do not
+exist, readiness is expected to fail closed.
 
 ## Adding a public file
 

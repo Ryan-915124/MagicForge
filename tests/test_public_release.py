@@ -80,6 +80,40 @@ def test_audit_rejects_every_private_boundary(tmp_path: Path) -> None:
     assert all(not Path(finding.path).is_absolute() for finding in findings)
 
 
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "outputs/result.json",
+        "trace/request.json",
+        "traces/request.json",
+        "logs/api.txt",
+        "backups/database.tar",
+        "cache/model.bin",
+        "app/outputs/result.json",
+        "app/traces/request.json",
+        "app/logs/api.txt",
+        "app/backups/database.tar",
+        "app/cache/model.bin",
+        "runtime.log",
+        "app/runtime.log",
+    ),
+)
+def test_audit_rejects_private_run_artifact_paths(
+    tmp_path: Path,
+    relative: str,
+) -> None:
+    root = tmp_path / "candidate"
+    _write(root / relative)
+
+    findings = audit_tree(root)
+
+    assert any(
+        finding.code in {"private_path", "private_storage"}
+        and (finding.path == relative or relative.startswith(f"{finding.path}/"))
+        for finding in findings
+    )
+
+
 def test_redistribution_check_reads_data_records_not_policy_prose(tmp_path: Path) -> None:
     root = tmp_path / "candidate"
     field = "redistribution_" + "allowed"
@@ -273,11 +307,25 @@ def test_root_private_ignore_rules_do_not_hide_nested_source_directories() -> No
     assert "/storage/" in gitignore
     assert "storage/" not in gitignore
     assert "/output/" in gitignore
+    assert "/outputs/" in gitignore
+    assert "/trace/" in gitignore
+    assert "/traces/" in gitignore
+    assert "/logs/" in gitignore
+    assert "/backups/" in gitignore
+    assert "/cache/" in gitignore
+    assert "*.log" in gitignore
     assert "/data/*" in gitignore
     assert "!/data/demo/**" in gitignore
     assert "/storage" in dockerignore
     assert "storage" not in dockerignore
     assert "/output" in dockerignore
+    assert "/outputs" in dockerignore
+    assert "/trace" in dockerignore
+    assert "/traces" in dockerignore
+    assert "/logs" in dockerignore
+    assert "/backups" in dockerignore
+    assert "/cache" in dockerignore
+    assert "**/*.log" in dockerignore
     assert "/data/*" in dockerignore
     assert "!/data/demo/**" in dockerignore
 
@@ -289,4 +337,28 @@ def test_all_runtime_profiles_have_public_safe_environment_examples() -> None:
         relative = f".env.{profile}.example"
         content = (root / relative).read_text(encoding="utf-8")
         assert f"MAGICFORGE_PROFILE={profile}" in content
+        assert relative in allowlist.splitlines()
+
+
+def test_public_docs_reference_only_tracked_release_guides() -> None:
+    root = Path(__file__).resolve().parents[1]
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    deployment = (root / "docs" / "DEPLOYMENT.md").read_text(encoding="utf-8")
+    data_boundary = (root / "docs" / "DATA_BOUNDARY.md").read_text(
+        encoding="utf-8"
+    )
+    allowlist = (root / "release" / "public-allowlist.txt").read_text(
+        encoding="utf-8"
+    )
+
+    assert "production-governance-operator-runbook.md" not in readme
+    assert "production-governance-operator-runbook.md" not in deployment
+    assert "python3 scripts/audit_public_release.py --artifact" in data_boundary
+    for relative in (
+        "docs/DEPLOYMENT.md",
+        "docs/OPERATIONS.md",
+        "docs/DATA_BOUNDARY.md",
+        "docs/production-governance-backend.md",
+    ):
+        assert (root / relative).is_file()
         assert relative in allowlist.splitlines()

@@ -5,9 +5,13 @@ This document covers the public Self-hosted Alpha. The supported public quick-st
 ## Supported toolchain
 
 - Docker Engine with Docker Compose v2
-- Python 3.12.3 for the launcher safety and Doctor checks; the Demo needs no third-party host packages
 - For source development: Node.js 22.22.1
 - Loopback ports 3000, 8000, 5432, and 6333 must be available unless overridden
+
+The Demo launcher does not require host Python. It uses Python 3.12.3 directly
+when available, or runs the identical preflight check in a network-isolated,
+read-only Python container before Compose starts the application. Python 3.12.3
+is still required for direct source development.
 
 ## Demo
 
@@ -48,10 +52,15 @@ GLM remains optional. When `GLM_API_KEY` is absent, LLM-dependent development fu
 
 The public checkout does not populate the Development corpus volume. Until the corpus root, Manifest, Receipt, schema, collection, and Qdrant contents agree, the Development API intentionally remains unready.
 
+Container orchestration uses `/health/live` so the control plane and diagnostic
+UI can start before a corpus is activated. `./magicforge doctor development`
+still checks `/health/ready` and fails until the complete corpus identity is
+valid; liveness never authorizes product reads.
+
 For direct host development:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.lock -r requirements-dev.lock
 cd frontend && npm ci && cd ..
 ```
@@ -81,7 +90,32 @@ The convenience Compose profile does not turn Demo into Production. Production r
 
 Production will not read `data/demo/`, fall back to Bootstrap, or start from Demo credentials. Missing governance state remains a readiness failure.
 
-Follow `docs/production-governance-operator-runbook.md` for the current Production workflow. The Alpha does not yet provide a one-command hosted Production deployment.
+The Production container healthcheck is intentionally liveness-based so an
+administrator can reach authentication and governance before the first corpus
+activation. Product readiness, retrieval, and storage authorization continue
+to fail closed until SQL, Manifest, Receipt, Active Corpus, and Qdrant identity
+all agree.
+
+Use this deployment boundary together with the tracked [operations](OPERATIONS.md)
+guide and the [Production governance backend](production-governance-backend.md)
+reference. The Alpha does not yet provide a one-command hosted Production
+deployment or an arbitrary-document import command.
+
+## Private corpus onboarding
+
+Do not bind-mount a private source tree into Demo and do not copy private inputs
+into `data/demo/`. Keep acquisition material in an external, access-controlled
+staging location, confirm processing and storage rights, and use the governed
+Source approval, Claim review, mapping review, Manifest authorization,
+ingestion, and activation stages. Development and Production remain not-ready
+until their configured Manifest, Receipt, collection, point count, and Active
+Corpus identity agree.
+
+The current public Alpha intentionally has no command that turns an arbitrary
+directory of documents into trusted knowledge. Follow the executable staged
+procedure in [DATA_BOUNDARY.md](DATA_BOUNDARY.md#onboarding-a-private-corpus),
+and keep every credential and private path in an untracked environment or
+secret manager.
 
 ## Initial administrator
 

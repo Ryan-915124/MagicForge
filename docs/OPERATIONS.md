@@ -21,6 +21,16 @@ Use `./magicforge doctor demo --static` when the Docker daemon is unavailable. S
 
 Ordinary `down` preserves named volumes. Do not manually remove PostgreSQL or Qdrant volumes while an environment matters.
 
+The launcher assigns a separate Compose project to each profile
+(`magicforge-demo` and `magicforge-development`). Always use the launcher for
+destructive cleanup. Running a raw `docker compose down --volumes` bypasses
+that profile isolation and is unsupported.
+
+Alpha 2 used the default `magicforge_*` volume namespace. Alpha 3 deliberately
+does not attach those legacy volumes automatically. Back them up and inspect
+them before any manual removal; do not rename or reuse them as another
+profile's state.
+
 ## Logs
 
 ```bash

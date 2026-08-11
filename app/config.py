@@ -115,6 +115,7 @@ class Settings:
     # ``None`` keeps direct Settings(...) construction backward compatible;
     # runtime code derives the profile from ``magicforge_mode`` in that case.
     magicforge_profile: MagicForgeProfile | None = None
+    demo_qdrant_url: str = ""
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection_name: str = "magicforge_knowledge_v01"
     qdrant_bootstrap_collection_name: str = "magicforge_bootstrap_v02"
@@ -172,6 +173,36 @@ class Settings:
 
         is_demo = profile == MagicForgeProfile.DEMO
         demo_root = PROJECT_ROOT / "data/demo"
+        demo_qdrant_url = (
+            os.getenv("MAGICFORGE_DEMO_QDRANT_URL", "").strip()
+            if is_demo
+            else ""
+        )
+        if demo_qdrant_url:
+            parsed_demo_qdrant = urlsplit(demo_qdrant_url)
+            try:
+                parsed_demo_port = parsed_demo_qdrant.port
+            except ValueError as exc:
+                raise SettingsConfigurationError(
+                    "MAGICFORGE_DEMO_QDRANT_URL must identify a credential-free local Qdrant endpoint"
+                ) from exc
+            if (
+                parsed_demo_qdrant.scheme != "http"
+                or parsed_demo_qdrant.hostname
+                not in {"qdrant", "localhost", "127.0.0.1", "::1"}
+                or parsed_demo_qdrant.username is not None
+                or parsed_demo_qdrant.password is not None
+                or (
+                    parsed_demo_port is not None
+                    and not 1 <= parsed_demo_port <= 65535
+                )
+                or parsed_demo_qdrant.path not in {"", "/"}
+                or bool(parsed_demo_qdrant.query)
+                or bool(parsed_demo_qdrant.fragment)
+            ):
+                raise SettingsConfigurationError(
+                    "MAGICFORGE_DEMO_QDRANT_URL must identify a credential-free local Qdrant endpoint"
+                )
         configured_root = os.getenv("ACTIVE_CORPUS_ROOT", "").strip()
         legacy_root = os.getenv("KNOWLEDGE_RUN_PATH", "").strip()
         if not is_demo and configured_root and legacy_root:
@@ -180,11 +211,15 @@ class Settings:
                     "ACTIVE_CORPUS_ROOT conflicts with legacy KNOWLEDGE_RUN_PATH"
                 )
         active_root = str(demo_root) if is_demo else configured_root or legacy_root
-        if not active_root and mode == MagicForgeMode.BOOTSTRAP:
+        if (
+            not active_root
+            and mode == MagicForgeMode.BOOTSTRAP
+            and not (profile_value and profile == MagicForgeProfile.DEVELOPMENT)
+        ):
             active_root = str(PROJECT_ROOT / "research/runs/bootstrap-002")
 
         storage_kind = (
-            "local"
+            ("remote" if demo_qdrant_url else "local")
             if is_demo
             else os.getenv(
                 "ACTIVE_QDRANT_STORAGE_KIND",
@@ -409,7 +444,11 @@ class Settings:
             bootstrap_allow_anonymous_reads=bootstrap_allow_anonymous_reads,
             magicforge_mode=mode,
             magicforge_profile=profile,
-            qdrant_url=os.getenv("QDRANT_URL", "http://localhost:6333").strip(),
+            demo_qdrant_url=demo_qdrant_url,
+            qdrant_url=(
+                demo_qdrant_url
+                or os.getenv("QDRANT_URL", "http://localhost:6333").strip()
+            ),
             qdrant_collection_name=qdrant_collection_name,
             qdrant_bootstrap_collection_name=os.getenv(
                 "QDRANT_BOOTSTRAP_COLLECTION_NAME", "magicforge_bootstrap_v02"
@@ -431,7 +470,7 @@ class Settings:
                 )
                 or (
                     "bootstrap-002"
-                    if mode == MagicForgeMode.BOOTSTRAP
+                    if mode == MagicForgeMode.BOOTSTRAP and active_root
                     else ""
                 )
             ),
@@ -453,7 +492,11 @@ class Settings:
             active_qdrant_local_path=active_local_path,
             knowledge_run_path=os.getenv(
                 "KNOWLEDGE_RUN_PATH",
-                str(PROJECT_ROOT / "research/runs/bootstrap-002"),
+                (
+                    ""
+                    if profile_value and profile == MagicForgeProfile.DEVELOPMENT
+                    else str(PROJECT_ROOT / "research/runs/bootstrap-002")
+                ),
             ).strip()
             if not is_demo
             else str(demo_root),
@@ -465,7 +508,7 @@ class Settings:
                 ).strip()
             ),
             embedding_dimension=(
-                128
+                384
                 if is_demo
                 else int(os.getenv("EMBEDDING_DIMENSION", "384"))
             ),
@@ -485,7 +528,11 @@ class Settings:
     @property
     def active_qdrant_location(self) -> str:
         if self.effective_profile == MagicForgeProfile.DEMO:
-            return "memory://magicforge-demo-v01"
+            return (
+                self.demo_qdrant_url
+                if self.demo_qdrant_url
+                else "memory://magicforge-demo-v01"
+            )
         if (
             self.magicforge_mode == MagicForgeMode.BOOTSTRAP
             and self.qdrant_bootstrap_local_path

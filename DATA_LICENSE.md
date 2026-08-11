@@ -33,5 +33,11 @@ URL, citation, or public accessibility alone is not redistribution permission.
 Source-specific attribution, provenance, sensitivity, and human-review rules
 continue to apply.
 
+Users who import or connect non-demo material are solely responsible for
+confirming that they have the rights required to access, process, embed, store,
+and expose that material in their intended environment. MagicForge's ability to
+read a file, URL, citation, or database record is not a representation that the
+material may be redistributed or used for every purpose.
+
 Third-party names, quotations, and source text are never synthetic merely
 because they appear in a generated file.

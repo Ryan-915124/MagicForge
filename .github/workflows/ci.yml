@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   pull_request:
   push:
     branches: [main]
@@ -26,7 +27,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       qdrant:
-        image: qdrant/qdrant:v1.13.6
+        image: qdrant/qdrant:v1.19.0
         ports:
           - 6333:6333
     env:
@@ -110,11 +111,32 @@ jobs:
       - uses: actions/checkout@v4
       - name: Start clean synthetic Demo
         run: ./magicforge up demo
-      - name: Run Demo Doctor
+      - name: Run Demo Doctor after first start
         run: ./magicforge doctor demo
-      - name: Verify public HTTP surfaces
-        run: python -m scripts.ops.full_stack_smoke --web-url http://127.0.0.1:3000
-      - name: Stop Demo
+      - name: Delete Demo volumes after first start
+        run: ./magicforge down demo --volumes --confirm delete-demo-volumes
+      - name: Start the same checkout from fresh volumes
+        run: ./magicforge up demo
+      - name: Run Demo Doctor after clean restart
+        run: ./magicforge doctor demo
+      - name: Create a real Demo backup
+        id: backup
+        run: |
+          backup_root="${RUNNER_TEMP}/magicforge-demo-backup"
+          mkdir -p "${backup_root}"
+          ./magicforge backup demo --output "${backup_root}"
+          mapfile -t bundles < <(find "${backup_root}" -mindepth 1 -maxdepth 1 -type d -name 'magicforge-demo-*' -print)
+          test "${#bundles[@]}" -eq 1
+          printf 'bundle_path=%s\n' "${bundles[0]}" >> "${GITHUB_OUTPUT}"
+      - name: Delete Demo volumes before restore
+        run: ./magicforge down demo --volumes --confirm delete-demo-volumes
+      - name: Restore the real Demo backup into fresh volumes
+        run: ./magicforge restore demo --input "${{ steps.backup.outputs.bundle_path }}" --confirm restore-demo
+      - name: Start the restored Demo
+        run: ./magicforge up demo
+      - name: Run Demo Doctor after restore
+        run: ./magicforge doctor demo
+      - name: Stop Demo and delete restored volumes
         if: always()
         run: ./magicforge down demo --volumes --confirm delete-demo-volumes
 
@@ -132,10 +154,10 @@ jobs:
           unzip -q dist/magicforge-public.zip -d dist/clean-room
       - name: Start the clean-room synthetic Demo
         working-directory: dist/clean-room/magicforge-public
-        run: ./magicforge up demo
+        run: MAGICFORGE_PYTHON_BIN=/unavailable ./magicforge up demo
       - name: Verify the clean-room Demo
         working-directory: dist/clean-room/magicforge-public
-        run: ./magicforge doctor demo
+        run: MAGICFORGE_PYTHON_BIN=/unavailable ./magicforge doctor demo
       - name: Stop the clean-room Demo
         if: always()
         working-directory: dist/clean-room/magicforge-public

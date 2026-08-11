@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 ARG PYTHON_IMAGE=python:3.12.3-slim-bookworm
+ARG POSTGRES_IMAGE=postgres:16.6-bookworm
 
 FROM ${PYTHON_IMAGE} AS builder
 
@@ -62,7 +63,7 @@ USER 10001:10001
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).read()"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=4).read()"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-server-header"]
 
@@ -72,12 +73,22 @@ FROM runtime AS development
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/opt/magicforge"]
 
 
-FROM runtime AS ops
+FROM ${POSTGRES_IMAGE} AS ops
 
-USER root
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+ENV HOME=/home/magicforge \
+    PATH=/opt/venv/bin:/usr/lib/postgresql/16/bin:${PATH} \
+    PYTHONPATH=/opt/magicforge \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN groupadd --gid 10001 magicforge \
+    && useradd --uid 10001 --gid 10001 --create-home --home-dir /home/magicforge magicforge
+
+COPY --from=runtime /usr/local /usr/local
+COPY --from=runtime /opt/venv /opt/venv
+COPY --from=runtime --chown=magicforge:magicforge /opt/magicforge /opt/magicforge
+
+WORKDIR /opt/magicforge
 USER 10001:10001
 
 ENTRYPOINT ["python", "-m", "scripts.ops.backup_restore"]

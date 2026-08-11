@@ -10,7 +10,7 @@ in CI and the GitHub release notes.
 - [x] Confirm project name, copyright holder (`Ryan915124`), and year (`2026`).
 - [x] Formally adopt Apache-2.0 for source code.
 - [x] Formally adopt CC BY 4.0 for the self-authored synthetic Demo data.
-- [ ] Confirm that every credential exposed outside its intended secret store has been rotated in the provider console.
+- [x] Maintainer confirmed on 2026-08-11 that every credential exposed outside its intended secret store was rotated in the provider console; no secret value was recorded in the repository.
 - [x] Verify CODEOWNERS with the GitHub login `@Ryan-915124`.
 
 ## Source boundary

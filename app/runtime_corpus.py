@@ -213,10 +213,16 @@ def _load_demo(settings: Settings) -> ActiveCorpus:
         receipt_id=bundle.receipt_id,
         receipt_path=corpus_path,
         collection_name=DEMO_COLLECTION_NAME,
-        storage_kind="local",
-        # Demo storage is process-local memory, never a persistent directory.
+        storage_kind="remote" if settings.demo_qdrant_url else "local",
+        # Direct source/test runs stay process-local.  The public Compose
+        # profile supplies an explicitly local, credential-free Qdrant URL so
+        # the API and Doctor inspect the same seeded collection.
         local_storage_path=None,
-        server_url=None,
+        server_url=(
+            settings.demo_qdrant_url
+            if settings.demo_qdrant_url
+            else None
+        ),
         artifact_root=expected_root,
         run_summary_path=None,
         smoke_report_path=None,

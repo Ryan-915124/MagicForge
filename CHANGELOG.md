@@ -6,6 +6,27 @@ separately and do not define the public package version.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-08-11
+
+### Changed
+
+- Unified the public Demo API and Doctor on the same isolated Qdrant collection
+  while preserving deterministic offline retrieval and read-only mutation gates.
+- Isolated Demo and Development Compose projects so destructive Demo cleanup
+  cannot remove another profile's named volumes.
+- Added same-runner clean rebuild and guarded PostgreSQL/Qdrant backup-restore
+  verification to CI, and made release artifacts wait for the complete CI gate.
+- Removed the host-Python prerequisite from the Docker Demo quick start and
+  strengthened public-artifact, trace, log, cache, backup, and corpus boundaries.
+
+### Fixed
+
+- Restored Qdrant snapshots with explicit snapshot priority and checksum
+  verification, and bound backups to the application, migration, Manifest, and
+  Receipt identities.
+- Kept the governance control plane reachable before a Production corpus is
+  activated while product readiness continues to fail closed.
+
 ## [0.1.0-alpha.2] - 2026-08-11
 
 ### Changed

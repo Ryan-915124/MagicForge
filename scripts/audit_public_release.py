@@ -28,7 +28,7 @@ DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024
 _RELEASE_MANIFEST_NAME = "PUBLIC_RELEASE_MANIFEST.json"
 _RELEASE_MANIFEST_SCHEMA = "magicforge-public-release-manifest-1"
 
-_CACHE_DIRECTORY_NAMES = frozenset(
+_PRIVATE_DIRECTORY_NAMES = frozenset(
     {
         ".git",
         ".magicforge",
@@ -37,16 +37,24 @@ _CACHE_DIRECTORY_NAMES = frozenset(
         ".pytest_cache",
         ".venv",
         "__pycache__",
+        "backups",
+        "cache",
+        "logs",
         "node_modules",
+        "output",
+        "outputs",
+        "trace",
+        "traces",
     }
 )
 _TOP_LEVEL_PRIVATE_DIRECTORIES = frozenset(
-    {"output", "outputs", "snapshot", "snapshots", "storage"}
+    {"snapshot", "snapshots", "storage"}
 )
 _PRIVATE_FILE_SUFFIXES = (
     ".db",
     ".dump",
     ".key",
+    ".log",
     ".p12",
     ".pem",
     ".pfx",
@@ -159,7 +167,7 @@ def path_policy_findings(
     lowered_parts = tuple(part.casefold() for part in path.parts)
     directory_parts = lowered_parts if is_directory else lowered_parts[:-1]
     for part in directory_parts:
-        if part in _CACHE_DIRECTORY_NAMES or part == "runs" or part.startswith(
+        if part in _PRIVATE_DIRECTORY_NAMES or part == "runs" or part.startswith(
             "qdrant_storage"
         ) or part.startswith("qdrant_snapshot"):
             findings.append(
@@ -196,7 +204,13 @@ def path_policy_findings(
     if name.endswith(_GENERATED_FILE_SUFFIXES):
         findings.append(AuditFinding("generated_artifact", display, "Generated cache/build file."))
     if name.endswith(_PRIVATE_FILE_SUFFIXES) or ".sqlite-" in name:
-        findings.append(AuditFinding("private_storage", display, "Database, key, dump, or snapshot file."))
+        findings.append(
+            AuditFinding(
+                "private_storage",
+                display,
+                "Database, key, dump, snapshot, or log file.",
+            )
+        )
     return findings
 
 
