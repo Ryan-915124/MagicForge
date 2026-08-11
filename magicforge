@@ -88,6 +88,7 @@ static_doctor_in_container() {
   require_docker
   stage="$(mktemp -d -t magicforge-static-check.XXXXXXXX)"
   mkdir -p -- "${stage}/scripts/ops" "${stage}/frontend" "${stage}/data/demo"
+  chmod 0755 -- "${stage}"
   cp -- \
     "${ROOT_DIR}/compose.yaml" \
     "${ROOT_DIR}/Dockerfile.backend" \

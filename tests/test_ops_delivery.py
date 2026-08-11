@@ -783,6 +783,7 @@ def test_cli_static_doctor_and_fail_closed_paths() -> None:
     launcher = CLI.read_text(encoding="utf-8")
     assert "wget --quiet --output-document=/dev/null" in launcher
     assert "wget --quiet --spider" not in launcher
+    assert 'chmod 0755 -- "${stage}"' in launcher
 
 
 def test_cli_up_waits_for_runtime_health_and_completed_jobs(tmp_path: Path) -> None:
