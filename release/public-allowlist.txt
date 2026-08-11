@@ -102,5 +102,6 @@ release/public-allowlist.txt
 scripts/__init__.py
 scripts/audit_public_release.py
 scripts/build_public_release.py
+scripts/check_release_version.py
 scripts/ops/**
 tests/**

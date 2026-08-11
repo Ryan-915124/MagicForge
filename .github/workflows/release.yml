@@ -2,6 +2,11 @@ name: Build public source release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v-prefixed tag that points to the selected commit
+        required: true
+        type: string
   push:
     tags:
       - "v*"
@@ -10,8 +15,14 @@ permissions:
   contents: read
 
 jobs:
+  full-ci:
+    uses: ./.github/workflows/ci.yml
+
   source-artifact:
+    needs: full-ci
     runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,6 +30,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.3"
+      - name: Verify release tag, commit, and public version identity
+        run: |
+          git rev-parse --verify "refs/tags/${RELEASE_TAG}"
+          test "$(git rev-list -n 1 "${RELEASE_TAG}")" = "${GITHUB_SHA}"
+          python scripts/check_release_version.py --tag "${RELEASE_TAG}"
       - run: python scripts/audit_public_release.py --source .
       - run: python scripts/build_public_release.py --output dist/magicforge-public.zip
       - run: unzip -q dist/magicforge-public.zip -d dist/extracted
@@ -28,7 +44,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
-          name: magicforge-public-source-${{ github.ref_name }}
+          name: magicforge-public-source-${{ env.RELEASE_TAG }}
           path: |
             dist/*.zip
             dist/*.sha256

@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import urllib.parse
 
 from qdrant_client import QdrantClient
 
@@ -57,8 +58,26 @@ def seed(corpus_path: Path) -> dict[str, object]:
     profile = _profile()
     bundle = _bundle(corpus_path)
     qdrant_url = os.getenv("QDRANT_URL", "").strip()
-    if not qdrant_url.startswith(("http://", "https://")):
-        raise DemoSeedError("Demo seed requires an HTTP(S) QDRANT_URL.")
+    parsed_qdrant = urllib.parse.urlsplit(qdrant_url)
+    try:
+        qdrant_port = parsed_qdrant.port
+    except ValueError as exc:
+        raise DemoSeedError(
+            "Demo seed requires the exact isolated Compose Qdrant target."
+        ) from exc
+    if (
+        parsed_qdrant.scheme != "http"
+        or parsed_qdrant.hostname != "qdrant"
+        or (qdrant_port or 6333) != 6333
+        or parsed_qdrant.username is not None
+        or parsed_qdrant.password is not None
+        or parsed_qdrant.path not in {"", "/"}
+        or bool(parsed_qdrant.query)
+        or bool(parsed_qdrant.fragment)
+    ):
+        raise DemoSeedError(
+            "Demo seed requires the exact isolated Compose Qdrant target."
+        )
     try:
         dimension = int(os.getenv("EMBEDDING_DIMENSION", "384"))
     except ValueError as exc:

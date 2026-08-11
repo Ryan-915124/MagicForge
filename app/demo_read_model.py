@@ -287,6 +287,11 @@ class DemoResearchConsoleReadModel:
         bundle = self._bundle
         generated_at = _iso(bundle.spec.generated_at)
         points = len(bundle.projections)
+        projection_label = (
+            "Qdrant projection"
+            if self.active_corpus.storage_kind == "remote"
+            else "In-memory projection"
+        )
         stages = (
             PipelineStageObservation(
                 id="source_registration",
@@ -302,7 +307,7 @@ class DemoResearchConsoleReadModel:
             ),
             PipelineStageObservation(
                 id="projection",
-                label="In-memory projection",
+                label=projection_label,
                 status="receipt_verified",
                 metrics={"points": points},
             ),
@@ -344,7 +349,7 @@ class DemoResearchConsoleReadModel:
                 "retrieval": {
                     "configured": True,
                     "collection": bundle.spec.collection_name,
-                    "storage_kind": "local",
+                    "storage_kind": self.active_corpus.storage_kind,
                     "connectivity": "not_probed",
                 },
             },

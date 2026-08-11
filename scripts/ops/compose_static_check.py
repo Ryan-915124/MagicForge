@@ -80,10 +80,18 @@ def _load_model() -> object:
         raise ComposeCheckError("compose.yaml is not valid YAML") from exc
 
 
-def validate(profile: str) -> None:
+def _load_json_model(payload: str) -> object:
+    try:
+        return json.loads(payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ComposeCheckError("Docker Compose returned invalid JSON") from exc
+
+
+def validate(profile: str, *, model: object | None = None) -> None:
     if profile not in ALLOWED_PROFILES:
-        raise ComposeCheckError("profile must be demo or development")
-    model = _load_model()
+        raise ComposeCheckError("profile must be demo, development, or production")
+    if model is None:
+        model = _load_model()
     services = model.get("services") if isinstance(model, dict) else None
     if not isinstance(services, dict):
         raise ComposeCheckError("compose.yaml has no services mapping")
@@ -134,6 +142,16 @@ def validate(profile: str) -> None:
             raise ComposeCheckError(f"{api_name} is not isolated to the Demo profile")
         if environment.get("GLM_API_KEY") not in {"", None}:
             raise ComposeCheckError(f"{api_name} exposes an LLM credential")
+        if environment.get("MAGICFORGE_DEMO_QDRANT_URL") != "http://qdrant:6333":
+            raise ComposeCheckError("api does not use the Compose Demo Qdrant service")
+        if environment.get("EMBEDDING_DIMENSION") != "384":
+            raise ComposeCheckError("api Demo embedding dimension is incompatible")
+    seed_environment = services["seed"].get("environment") or {}
+    if (
+        seed_environment.get("QDRANT_URL") != "http://qdrant:6333"
+        or seed_environment.get("EMBEDDING_DIMENSION") != "384"
+    ):
+        raise ComposeCheckError("Demo seed and API retrieval contracts disagree")
     development_environment = services["api-dev"].get("environment") or {}
     if development_environment.get("MAGICFORGE_PROFILE") != "development":
         raise ComposeCheckError("api-dev is disguised as a Demo runtime")
@@ -197,6 +215,14 @@ def validate(profile: str) -> None:
     ):
         raise ComposeCheckError("web services do not wait for healthy APIs")
 
+    for name in ("api", "api-dev", "api-production"):
+        healthcheck = services[name].get("healthcheck") or {}
+        serialized_healthcheck = json.dumps(healthcheck, sort_keys=True)
+        if "/health/live" not in serialized_healthcheck:
+            raise ComposeCheckError(
+                f"{name} healthcheck blocks the governance control plane on corpus readiness"
+            )
+
     raw_compose = COMPOSE.read_text(encoding="utf-8")
     serialized = raw_compose.casefold()
     if re.search(r"(?mi)^[ \t]*include[ \t]*:", raw_compose):
@@ -248,6 +274,11 @@ def validate(profile: str) -> None:
     backend_dockerfile = (ROOT / "Dockerfile.backend").read_text(encoding="utf-8")
     if "requirements.lock" not in backend_dockerfile or "data/demo" not in backend_dockerfile:
         raise ComposeCheckError("backend image lacks locked dependencies or public Demo data")
+    if (
+        "ARG POSTGRES_IMAGE=postgres:16.6-bookworm" not in backend_dockerfile
+        or "FROM ${POSTGRES_IMAGE} AS ops" not in backend_dockerfile
+    ):
+        raise ComposeCheckError("ops image PostgreSQL client does not match the Demo server")
     dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8")
     if (
         "research/runs" not in dockerignore
@@ -275,9 +306,15 @@ def validate(profile: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True, choices=sorted(ALLOWED_PROFILES))
+    parser.add_argument(
+        "--compose-json-stdin",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     arguments = parser.parse_args()
     try:
-        validate(arguments.profile)
+        model = _load_json_model(sys.stdin.read()) if arguments.compose_json_stdin else None
+        validate(arguments.profile, model=model)
     except ComposeCheckError as exc:
         print(f"static doctor failed: {exc}", file=sys.stderr)
         return 1

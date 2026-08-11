@@ -297,11 +297,19 @@ def build_runtime_services(
             client = (
                 qdrant_client_factory(active_corpus)
                 if qdrant_client_factory is not None
-                else qdrant_client.QdrantClient(location=":memory:")
+                else (
+                    _default_qdrant_client_factory(active_corpus)
+                    if active_corpus.server_url
+                    else qdrant_client.QdrantClient(location=":memory:")
+                )
             )
             assert demo_bundle is not None
             assert isinstance(embeddings, DeterministicDemoEmbeddingProvider)
-            seed_demo_collection(client, demo_bundle, embeddings)
+            # The Compose seed job owns the server collection.  Runtime may
+            # seed only its process-local test/source instance; once exposed,
+            # every Demo mutation method remains fail closed.
+            if active_corpus.server_url is None:
+                seed_demo_collection(client, demo_bundle, embeddings)
         else:
             client = (qdrant_client_factory or _default_qdrant_client_factory)(
                 active_corpus

@@ -8,6 +8,7 @@ import pytest
 from qdrant_client import QdrantClient
 
 import app.main as main_module
+import app.runtime as runtime_module
 from app.config import (
     PROJECT_ROOT,
     MagicForgeProfile,
@@ -89,6 +90,25 @@ def test_named_profiles_are_the_mode_source_of_truth(
     assert settings.magicforge_mode == expected_mode
 
 
+def test_explicit_development_profile_never_falls_back_to_private_runs(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("MAGICFORGE_PROFILE", "development")
+    monkeypatch.setenv("ACTIVE_CORPUS_ROOT", "")
+    monkeypatch.setenv("KNOWLEDGE_RUN_PATH", "")
+    monkeypatch.setenv("ACTIVE_CORPUS_ID", "")
+    monkeypatch.setenv("ACTIVE_CORPUS_MANIFEST_PATH", "")
+    monkeypatch.setenv("ACTIVE_CORPUS_RECEIPT_PATH", "")
+
+    settings = Settings.from_env()
+
+    assert settings.active_corpus_root == ""
+    assert settings.knowledge_run_path == ""
+    assert settings.active_corpus_id == ""
+    assert "research/runs" not in settings.active_corpus_manifest_path
+    assert "research/runs" not in settings.active_corpus_receipt_path
+
+
 def test_demo_profile_ignores_private_runtime_and_credentials(monkeypatch) -> None:
     monkeypatch.setenv("MAGICFORGE_PROFILE", "demo")
     monkeypatch.setenv("MAGICFORGE_MODE", "production")
@@ -115,11 +135,51 @@ def test_demo_profile_ignores_private_runtime_and_credentials(monkeypatch) -> No
     assert settings.production_glm_extraction_enabled is False
     assert settings.production_qdrant_writes_enabled is False
     assert settings.embedding_model == "deterministic-demo-hash"
-    assert settings.embedding_dimension == 128
+    assert settings.embedding_dimension == 384
     assert Path(settings.active_corpus_root) == PROJECT_ROOT / "data/demo"
     assert Path(settings.knowledge_run_path) == PROJECT_ROOT / "data/demo"
     assert settings.active_qdrant_collection_name == "magicforge_demo_v01"
     assert settings.anonymous_product_reads_enabled is True
+
+
+def test_demo_compose_qdrant_endpoint_is_explicit_local_and_credential_free(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("MAGICFORGE_PROFILE", "demo")
+    monkeypatch.setenv("MAGICFORGE_DEMO_QDRANT_URL", "http://qdrant:6333")
+
+    settings = Settings.from_env()
+
+    assert settings.active_qdrant_storage_kind == "remote"
+    assert settings.demo_qdrant_url == "http://qdrant:6333"
+    assert settings.active_qdrant_location == "http://qdrant:6333"
+
+    monkeypatch.setenv(
+        "MAGICFORGE_DEMO_QDRANT_URL",
+        "https://credential@example.invalid:6333",
+    )
+    with pytest.raises(
+        SettingsConfigurationError,
+        match="credential-free local Qdrant endpoint",
+    ):
+        Settings.from_env()
+
+    monkeypatch.setenv("MAGICFORGE_DEMO_QDRANT_URL", "http://qdrant:not-a-port")
+    with pytest.raises(
+        SettingsConfigurationError,
+        match="credential-free local Qdrant endpoint",
+    ):
+        Settings.from_env()
+
+    monkeypatch.setenv(
+        "MAGICFORGE_DEMO_QDRANT_URL",
+        "http://qdrant:6333/collections?api_key=not-a-secret-store",
+    )
+    with pytest.raises(
+        SettingsConfigurationError,
+        match="credential-free local Qdrant endpoint",
+    ):
+        Settings.from_env()
 
 
 def test_demo_corpus_loader_never_reads_research_runs(monkeypatch) -> None:
@@ -237,6 +297,44 @@ def test_demo_runtime_is_offline_and_returns_graph_and_retrieval() -> None:
         assert runtime.magicforge_service.llm.model == "deterministic-demo"
         with pytest.raises(QdrantServiceError):
             runtime.retriever.create_collection()
+    finally:
+        runtime.close()
+
+
+def test_demo_server_runtime_reads_the_preseeded_compose_collection(
+    monkeypatch,
+) -> None:
+    bundle = load_demo_bundle(DEMO_PATH)
+    embeddings = DeterministicDemoEmbeddingProvider(64)
+    client = QdrantClient(location=":memory:")
+    seed_demo_collection(client, bundle, embeddings)
+
+    def runtime_must_not_seed(*_args, **_kwargs):
+        raise AssertionError("the API attempted to mutate the server Demo collection")
+
+    monkeypatch.setattr(runtime_module, "seed_demo_collection", runtime_must_not_seed)
+    settings = _demo_settings(
+        demo_qdrant_url="http://qdrant:6333",
+    )
+    runtime = build_runtime_services(
+        settings,
+        qdrant_client_factory=lambda _corpus: client,
+    )
+    authorization = retrieval_authorization_for_actor(bootstrap_anonymous_actor())
+    try:
+        assert runtime.active_corpus.storage_kind == "remote"
+        assert runtime.active_corpus.server_url == "http://qdrant:6333"
+        assert runtime.retriever.search_documents(
+            "selective attention",
+            limit=3,
+            authorization=authorization,
+        )
+        console = runtime.research_console_read_model.snapshot(settings)
+        assert console.runtime["retrieval"]["storage_kind"] == "remote"
+        projection_stage = next(
+            stage for stage in console.pipeline["stages"] if stage.id == "projection"
+        )
+        assert projection_stage.label == "Qdrant projection"
     finally:
         runtime.close()
 

@@ -28,10 +28,17 @@ localization/.cache
 !/data/demo
 !/data/demo/**
 /output
+/outputs
+/trace
+/traces
+/logs
+/backups
+/cache
 /storage
 /snapshots
 **/qdrant_storage*
 **/qdrant_snapshots*
+**/*.log
 docs/screenshots
 /dist
 /release/artifacts
